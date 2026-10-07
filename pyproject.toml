@@ -1,0 +1,60 @@
+[project]
+name = "fylax-back"
+version = "0.1.0"
+description = "Fylax — Backend de salud financiera automática (MVP). FastAPI + Supabase + Celery."
+requires-python = ">=3.12"
+dependencies = [
+    # API web (PRD §4 — FastAPI, alto rendimiento asíncrono)
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    # ORM / migraciones (PRD §4 — SQLAlchemy 2 + Alembic)
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.2",
+    "asyncpg>=0.29",
+    # Auth: verificación del JWT de Supabase (PRD §9)
+    "pyjwt>=2.9",
+    "cryptography>=43.0",
+    # Google Cloud: Pub/Sub y Gmail API (PRD §4)
+    "google-cloud-pubsub>=2.25",
+    "google-api-python-client>=2.143",
+    "google-auth>=2.34",
+    # Cola de tareas (PRD §4 — Celery + Redis)
+    "celery[redis]>=5.4",
+    "redis>=5.0",
+    # Cliente HTTP (llamadas a JEV — PRD §4)
+    "httpx>=0.27",
+    # Monitoreo (PRD §4 — Sentry + Cloud Logging)
+    "sentry-sdk[fastapi]>=2.14",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "respx>=0.21",
+    "factory-boy>=3.3",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
