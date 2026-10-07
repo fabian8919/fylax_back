@@ -65,6 +65,10 @@ class User(Base):
     )
     # Preparación futura Wompi (PRD §F4.2) — sin migraciones destructivas.
     wompi_customer_id: Mapped[str | None] = mapped_column(String(128))
+    # Configuración financiera del usuario (dashboard F3.1). Montos
+    # positivos; 0 = no configurado.
+    monthly_income: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    monthly_budget: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -73,6 +77,11 @@ class Category(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # NULL = categoría del sistema (semilla); con valor = personalizada
+    # del usuario (solo visible para él).
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), index=True
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     icon: Mapped[str] = mapped_column(String(64), default="category")
@@ -127,3 +136,25 @@ class EmailSyncState(Base):
     status: Mapped[str] = mapped_column(
         String(16), default=SyncStatusState.active.value
     )
+    # Último error de sincronización (truncado); NULL cuando va bien.
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class Goal(Base):
+    """Propósito de ahorro del usuario (carro, moto, viaje, deudas…)."""
+
+    __tablename__ = "goals"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    saved_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    icon: Mapped[str] = mapped_column(String(64), default="savings")
+    color: Mapped[str] = mapped_column(String(9), default="#2E8FFF")
+    deadline: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -68,9 +68,10 @@ class AmazonParser(TransactionParser):
         match = self._total_re.search(body)
         if not match:
             return None
+        # Formato COP: "." miles, "," decimales → "$129.900" = 129900.
         return ExtractedTransaction(
             merchant="Amazon",
-            amount=Decimal(match.group(1).replace(",", "")),
+            amount=Decimal(match.group(1).replace(".", "").replace(",", "")),
             date=date.today(),
             currency="COP",
             payment_method=None,

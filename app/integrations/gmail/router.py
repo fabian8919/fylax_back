@@ -38,7 +38,7 @@ async def gmail_webhook(
 
     # 2. Parseo mínimo del envelope (el cuerpo NO se procesa aquí).
     envelope = PubSubPush(**(await request.json()))
-    data = json.loads(base64.b64decode(envelope["message"]["data"]).decode())
+    data = json.loads(base64.b64decode(envelope.message["data"]).decode())
 
     # 3. Encolar y responder YA. Objetivo < 300 ms (F2.5).
     history_id = str(data.get("historyId", ""))

@@ -4,7 +4,6 @@ Estado de la sincronización de correo: última actualización, historyId
 procesado y estado del watch (active | error | revoked — PRD §8).
 """
 
-import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,7 +22,7 @@ class SyncStatusResponse(BaseModel):
     status: str
     last_sync_at: datetime | None
     gmail_history_id: str | None
-    last_error: str | None = None  # TODO(Fase 3): columna en EmailSyncState
+    last_error: str | None = None
 
 
 @router.get("/sync/status", response_model=SyncStatusResponse)
@@ -43,4 +42,5 @@ async def get_sync_status(
         status=state.status,
         last_sync_at=state.last_sync_at,
         gmail_history_id=state.gmail_history_id,
+        last_error=state.last_error,
     )

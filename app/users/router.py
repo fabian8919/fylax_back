@@ -6,10 +6,11 @@ Supabase Auth, que incluye los tokens de Google. El provider_token
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,7 +36,17 @@ class UserResponse(BaseModel):
     email: EmailStr
     name: str
     subscription_tier: str
+    monthly_income: Decimal
+    monthly_budget: Decimal
     created_at: datetime
+
+
+class UserUpdate(BaseModel):
+    """PATCH /users/me — opciones de perfil y configuración financiera."""
+
+    name: str | None = Field(None, max_length=255)
+    monthly_income: Decimal | None = Field(None, ge=0)
+    monthly_budget: Decimal | None = Field(None, ge=0)
 
 
 @router.post("/auth/session", response_model=UserResponse)
@@ -73,6 +84,37 @@ async def create_or_update_session(
 
 
 @router.get("/users/me", response_model=UserResponse)
-async def get_me(current_user: CurrentUser = Depends(get_current_user)) -> User:
-    # TODO(Fase 4): consultar el usuario real en BD y devolverlo.
-    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED)
+async def get_me(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> User:
+    """Perfil del usuario autenticado."""
+    result = await db.execute(select(User).where(User.id == current_user.id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Usuario no registrado: llama primero a /auth/session",
+        )
+    return user
+
+
+@router.patch("/users/me", response_model=UserResponse)
+async def update_me(
+    body: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> User:
+    """Actualiza nombre, ingreso mensual y presupuesto mensual."""
+    result = await db.execute(select(User).where(User.id == current_user.id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Usuario no registrado: llama primero a /auth/session",
+        )
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+    await db.commit()
+    await db.refresh(user)
+    return user

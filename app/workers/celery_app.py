@@ -12,6 +12,7 @@ Configuración (PRD §F2.5):
 """
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import task_failure
 
 from app.core.config import get_settings
@@ -22,7 +23,10 @@ celery_app = Celery(
     "fylax",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.workers.tasks.process_email"],
+    include=[
+        "app.workers.tasks.process_email",
+        "app.workers.tasks.renew_watches",
+    ],
 )
 
 celery_app.conf.update(
@@ -34,6 +38,13 @@ celery_app.conf.update(
     task_time_limit=300,
     # Dead-letter: tras agotar reintentos, la tarea queda registrada
     # (failed state en Redis) y se notifica a Sentry.
+    # Renovación diaria de watches de Gmail (expiran a los 7 días — §13).
+    beat_schedule={
+        "renew-gmail-watches-daily": {
+            "task": "app.workers.tasks.renew_watches.renew_gmail_watches",
+            "schedule": crontab(hour=4, minute=17),
+        },
+    },
 )
 
 

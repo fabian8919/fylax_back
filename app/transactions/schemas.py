@@ -32,6 +32,7 @@ class TransactionResponse(TransactionBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    user_id: UUID
     date: datetime
     source: str
     source_ref_id: str | None

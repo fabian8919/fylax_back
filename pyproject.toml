@@ -7,7 +7,7 @@ dependencies = [
     # API web (PRD §4 — FastAPI, alto rendimiento asíncrono)
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
-    "pydantic>=2.9",
+    "pydantic[email]>=2.9",
     "pydantic-settings>=2.5",
     # ORM / migraciones (PRD §4 — SQLAlchemy 2 + Alembic)
     "sqlalchemy[asyncio]>=2.0",
@@ -38,11 +38,15 @@ dev = [
     "mypy>=1.11",
     "respx>=0.21",
     "factory-boy>=3.3",
+    "aiosqlite>=0.20",
 ]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.ruff]
 line-length = 100
@@ -50,6 +54,8 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM"]
+# B008: Depends()/Query() en defaults ES el idiom de FastAPI.
+ignore = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"

@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     google_pubsub_verification_token: str = ""
     pubsub_topic: str = "gmail-notifications"
     pubsub_subscription: str = "gmail-notifications-sub"
+    # OAuth de Google: para intercambiar el refresh_token por access_token
+    # al llamar la Gmail API desde los workers (PRD §F2.1).
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    gcp_project_id: str = ""
 
     # Motor de IA JEV (PRD §4)
     jev_api_key: str = ""

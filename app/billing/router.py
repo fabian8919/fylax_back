@@ -6,16 +6,15 @@ eventos de Wompi se agregará en una fase posterior poblando campos
 existentes, sin migraciones destructivas.
 """
 
-from collections.abc import Awaitable, Callable
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import TierLimitExceededError
 from app.core.security import CurrentUser, get_current_user
-from app.db.models import Transaction, User
+from app.db.models import User
 from app.db.session import get_db
 
 router = APIRouter(prefix="/billing", tags=["billing"])

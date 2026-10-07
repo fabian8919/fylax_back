@@ -8,7 +8,7 @@ Costo: el watch habilita las notificaciones push vía Pub/Sub; el backend
 NO hace polling de la bandeja.
 """
 
-from googleapiclient.discovery import build
+from app.integrations.gmail.client import build_gmail_service
 
 # Tipo de notificación push hacia Pub/Sub (PRD §Épica 2, paso 2).
 TOPIC_NAME_TEMPLATE = "projects/{project}/topics/{topic}"
@@ -25,10 +25,7 @@ def register_watch(
     El refresh_token llega DESENCRIPTADO desde el worker (se descifra con
     TokenCipher justo antes de llamar a la Gmail API — PRD §F2.1/F1.3).
     """
-    # TODO(Fase 3): intercambiar refresh_token por access_token con
-    # google-auth (OAuth2Session + client secrets de Google Cloud).
-    # creds = Credentials(...) → build("gmail", "v1", credentials=creds)
-    service = build("gmail", "v1", credentials=None)  # placeholder
+    service = build_gmail_service(refresh_token)
     request = {
         "labelIds": [LABEL_ID_INBOX],
         "topicName": TOPIC_NAME_TEMPLATE.format(project=project_id, topic=topic),
