@@ -35,15 +35,16 @@ app/
 ├── core/                    # config, seguridad (JWT + AES-256-GCM), errores
 ├── common/                  # paginación
 ├── db/                      # engine, sesiones y modelos (PRD §8)
-├── users/                   # POST /auth/session (Épica 1)
+├── users/                   # POST /auth/session, GET|PATCH /users/me (Épica 1)
 ├── transactions/            # CRUD + filtros (Épica 3)
-├── categories/              # GET /categories
+├── categories/              # GET /categories + seed del catálogo base
 ├── dashboard/               # GET /dashboard/summary
+├── goals/                   # CRUD /goals + contribuciones (propósitos de ahorro)
 ├── sync/                    # GET /sync/status
 ├── billing/                 # límites por tier free/pro (Épica 4, sin paywall)
-├── integrations/gmail/      # webhook Pub/Sub, watch, parsers, JEV (Épica 2)
-└── workers/                 # Celery: process_new_email (ADR Web/Workers)
-alembic/                     # migraciones versionadas
+├── integrations/gmail/      # webhook Pub/Sub, client OAuth, watch, parsers, JEV (Épica 2)
+└── workers/                 # Celery: process_new_email + renew_watches (ADR Web/Workers)
+alembic/                     # migraciones versionadas (0001 = esquema + semilla)
 supabase/rls_policies.sql    # Row Level Security (PRD §10)
 tests/                       # tests de parsers e idempotencia (Fase 6)
 ```
@@ -64,21 +65,25 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -e ".[dev]"
 cp .env.example .env                                 # completar variables
 
-alembic upgrade head                                 # migraciones
+alembic upgrade head                                 # migraciones + semilla de categorías
 uvicorn app.main:app --reload                        # API web en :8000
 celery -A app.workers.celery_app worker -Q gmail     # worker de ingesta
+celery -A app.workers.celery_app beat                # renovación diaria de watches
 ```
 
 Documentación interactiva (OpenAPI/Swagger) en `/docs` (PRD §9).
 
 ## Endpoints (PRD §9)
 
-`POST /auth/session` · `POST /webhooks/gmail` · `GET|POST /transactions` ·
-`PATCH|DELETE /transactions/{id}` · `GET /categories` ·
-`GET /dashboard/summary` · `GET /sync/status`
+`POST /auth/session` · `GET|PATCH /users/me` · `POST /webhooks/gmail` ·
+`GET|POST /transactions` · `PATCH|DELETE /transactions/{id}` ·
+`GET /categories` · `GET /dashboard/summary` ·
+`GET|POST /goals` · `PATCH|DELETE /goals/{id}` ·
+`POST /goals/{id}/contributions` · `GET /sync/status`
 
-Todas las rutas (excepto `/webhooks/gmail` y `/auth/session`) exigen el JWT
-de Supabase Auth verificado.
+Todas las rutas (excepto `/webhooks/gmail`) exigen el JWT de Supabase Auth
+verificado. Montos siempre positivos: egreso/ingreso se distingue por
+`Category.type`.
 
 ## Seguridad (PRD §10)
 
@@ -90,10 +95,29 @@ de Supabase Auth verificado.
 
 ## Estado del proyecto
 
-Estructura base generada desde el PRD v2.0 (23-sep-2026). Los puntos de
-implementación quedaron marcados con `TODO(Fase N)` según el plan de fases
-del PRD §12:
+Fases 1–4 del PRD §12 **implementadas y verificadas** (07-oct-2026):
 
-- Fases 1–4: backend base, auth, ingesta Gmail y API de consulta → **este repo**.
-- Fase 5: app Flutter → repositorio `fylax_front`.
-- Fase 6: endurecimiento (tests de precisión ≥ 90 %, Sentry, CI/CD, deploy a Cloud Run).
+- **Fase 1 — Base**: modelos completos (incl. `Goal` de propósitos de
+  ahorro, presupuesto/ingreso en `User`, categorías personalizadas),
+  migración `0001_initial` con esquema + semilla de categorías alineada
+  con la app Flutter.
+- **Fase 2 — Auth**: `/auth/session` con cifrado AES-256-GCM del refresh
+  token, `GET|PATCH /users/me` (perfil + configuración financiera).
+- **Fase 3 — Ingesta Gmail**: cliente OAuth (refresh→access), watch +
+  renovación diaria por Celery beat, worker con historyId incremental y
+  fallback de búsqueda, parsers deterministas + JEV, idempotencia por
+  savepoint, `last_error` visible en `/sync/status`.
+- **Fase 4 — API de consulta**: transacciones, categorías, dashboard
+  (montos positivos + presupuesto del perfil), goals CRUD + abonos,
+  sync status.
+
+Verificación local: `pytest` (5 passed, 3 skipped de Fase 6), `ruff`
+limpio, rutas registradas y protegidas (401 sin JWT), SQL de migración
+validado en modo offline.
+
+Pendiente:
+
+- **Fase 5**: app Flutter → repositorio `fylax_front` (ya desarrollada).
+- **Fase 6 — Endurecimiento**: tests de precisión ≥ 90 % con correos
+  anonimizados, CI/CD, deploy a Cloud Run y `.env` real (Supabase,
+  Redis, Google Cloud, JEV) para correr contra producción/staging.

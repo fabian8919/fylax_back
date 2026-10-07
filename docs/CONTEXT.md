@@ -191,8 +191,9 @@ Actuar como Staff Engineer: fases cerradas y verificables, sin mezclar capas.
 6. **Fase 6 — Endurecimiento**: tests de precisión (parsers + JEV), Sentry,
    CI/CD y despliegue a Cloud Run.
 
-Los puntos pendientes están marcados en el código con `TODO(Fase N)` y en
-los tests con `@pytest.mark.skip`.
+> **Estado (07-oct-2026):** las fases 1–4 están implementadas. Quedan
+> pendientes los `TODO` puntuales de detalle (p. ej. fecha real en el
+> parser de Bancolombia) y los tests `@pytest.mark.skip` de la Fase 6.
 
 ## 12. Riesgos y mitigaciones (PRD §13)
 
@@ -212,7 +213,8 @@ los tests con `@pytest.mark.skip`.
 | PRD | Paquete / archivo |
 |-|-|
 | F1.1–F1.3 auth + JWT + AES-256-GCM | `app/users/router.py`, `app/core/security.py` |
-| F2.1 watch / renovación | `app/integrations/gmail/watch.py` |
+| F2.1 cliente OAuth Gmail (refresh→access) | `app/integrations/gmail/client.py` |
+| F2.1 watch / renovación | `app/integrations/gmail/watch.py`, `app/workers/tasks/renew_watches.py` |
 | F2.1/F2.5 webhook Pub/Sub < 300 ms | `app/integrations/gmail/router.py` |
 | F2.2 queries financieras + historyId | `app/workers/tasks/process_email.py` |
 | F2.3 system prompt JEV + schema | `app/integrations/gmail/jev_client.py` |
@@ -220,6 +222,8 @@ los tests con `@pytest.mark.skip`.
 | F2.5 cola, backoff, dead-letter, Sentry | `app/workers/celery_app.py` |
 | F2.6 UNIQUE idempotencia | `app/db/models.py` (`Transaction`) |
 | Épica 3 contrato API | `app/transactions/`, `app/dashboard/`, `app/categories/`, `app/sync/` |
+| Propósitos de ahorro (goals) | `app/goals/router.py`, `app/db/models.py` (`Goal`) |
+| Semilla de categorías (única fuente) | `app/categories/seed.py` + `alembic/versions/0001_initial.py` |
 | F4.1–F4.2 tiers y Wompi | `app/billing/router.py`, `app/db/models.py` (`User`) |
 | §8 modelo de datos | `app/db/models.py` + migraciones Alembic |
 | §10 RLS | `supabase/rls_policies.sql` |
