@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # rotación); el legacy secret (HS256) queda solo como fallback.
     supabase_url: str = ""
     supabase_jwt_secret: str = ""
+    # Secret key (service role) para operaciones privilegiadas del backend
+    # (bypass de RLS desde el servidor, gestión de usuarios). Nunca en el
+    # cliente (PRD §10).
+    supabase_secret_key: str = ""
 
     # Cola Celery / Redis (PRD §4)
     redis_url: str = "redis://localhost:6379/0"
