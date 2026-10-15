@@ -13,7 +13,11 @@ import sentry_sdk
 from fastapi import FastAPI
 
 from app.core.config import get_settings
+from app.core.loop_policy import ensure_selector_loop_policy
 from app.routers import api_router
+
+# psycopg async exige SelectorEventLoop en Windows (ver core/loop_policy).
+ensure_selector_loop_policy()
 
 settings = get_settings()
 

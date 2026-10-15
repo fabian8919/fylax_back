@@ -16,6 +16,11 @@ from celery.schedules import crontab
 from celery.signals import task_failure
 
 from app.core.config import get_settings
+from app.core.loop_policy import ensure_selector_loop_policy
+
+# Los workers corren asyncio.run() por tarea: psycopg async exige
+# SelectorEventLoop en Windows (ver core/loop_policy).
+ensure_selector_loop_policy()
 
 settings = get_settings()
 
