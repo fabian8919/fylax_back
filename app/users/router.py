@@ -71,6 +71,10 @@ async def create_or_update_session(
             ),
         )
         db.add(user)
+        # Flush explícito: sin relationship ORM entre User y EmailSyncState
+        # el unit of work no garantiza el orden de inserción y el hijo
+        # puede insertarse antes que el padre (violación de FK → 500).
+        await db.flush()
         db.add(EmailSyncState(user_id=user.id, status="active"))
     else:
         user.email = current_user.email
