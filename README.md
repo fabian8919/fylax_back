@@ -60,6 +60,19 @@ modo background o Compute Engine e2-micro.
 
 ## Puesta en marcha
 
+Un solo comando (Git Bash en Windows, también Linux/macOS):
+
+```bash
+./scripts/setup.sh           # venv + dependencias + migraciones (alembic upgrade head)
+./scripts/setup.sh --serve   # lo anterior y levanta la API en :8000
+```
+
+Requisitos previos: Python ≥ 3.12 en PATH y un `.env` completo
+(`cp .env.example .env`). Las políticas RLS (`supabase/rls_policies.sql`)
+se aplican aparte en el SQL Editor de Supabase.
+
+Equivalente manual:
+
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
