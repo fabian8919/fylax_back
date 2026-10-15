@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     # Base de datos PostgreSQL de Supabase (PRD §4)
     database_url: str = ""
 
-    # Supabase Auth — verificación de JWT (PRD §9)
+    # Supabase Auth — verificación de JWT (PRD §9).
+    # La verificación principal usa el JWKS público (llaves ECC/ES256 con
+    # rotación); el legacy secret (HS256) queda solo como fallback.
     supabase_url: str = ""
     supabase_jwt_secret: str = ""
 

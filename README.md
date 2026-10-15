@@ -87,6 +87,9 @@ verificado. Montos siempre positivos: egreso/ingreso se distingue por
 
 ## Seguridad (PRD §10)
 
+- JWT de Supabase verificado contra el JWKS público del proyecto
+  (llaves ECC/ES256 con rotación — JWT Signing Keys); el legacy secret
+  HS256 queda solo como fallback opcional.
 - refresh_token de Google cifrado con AES-256-GCM (llave en Secret Manager).
 - Row Level Security en Supabase (`supabase/rls_policies.sql`).
 - Solo el scope `gmail.readonly` (mínimos privilegios, OAuth App Verification).
