@@ -86,6 +86,6 @@ echo "  Supabase (RLS — PRD §10) y ten Redis corriendo para los workers."
 
 # --- 6. Servir (opcional) ----------------------------------------------------
 if [ "$SERVE" = true ]; then
-  info "Levantando API en http://localhost:8000 ..."
-  exec uvicorn app.main:app --reload --port 8000
+  info "Levantando API en http://localhost:8000 (0.0.0.0: accesible desde la LAN, ej. teléfono físico) ..."
+  exec uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 fi
