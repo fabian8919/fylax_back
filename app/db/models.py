@@ -52,21 +52,20 @@ class SyncStatusState(StrEnum):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # Enlazado a Supabase Auth; el email es único.
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), default="")
     # AES-256-GCM (PRD §F1.3). El token NUNCA está en texto plano.
     google_refresh_token: Mapped[str | None] = mapped_column(Text)
-    subscription_tier: Mapped[str] = mapped_column(
-        String(16), default=SubscriptionTier.free.value
-    )
+    subscription_tier: Mapped[str] = mapped_column(String(16), default=SubscriptionTier.free.value)
     # Preparación futura Wompi (PRD §F4.2) — sin migraciones destructivas.
     wompi_customer_id: Mapped[str | None] = mapped_column(String(128))
-    # Configuración financiera del usuario (dashboard F3.1). Montos
-    # positivos; 0 = no configurado.
+    # Configuración financiera del usuario (dashboard F3.1). Se captura el
+    # ingreso por período y se normaliza a mensual: quincenal = 2 períodos.
+    # Montos positivos; 0 = no configurado.
+    income_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    income_frequency: Mapped[str] = mapped_column(String(16), default="monthly")
     monthly_income: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     monthly_budget: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -75,9 +74,7 @@ class User(Base):
 class Category(Base):
     __tablename__ = "categories"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # NULL = categoría del sistema (semilla); con valor = personalizada
     # del usuario (solo visible para él).
     user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -100,9 +97,7 @@ class Transaction(Base):
         Index("ix_transactions_user_date", "user_id", "date"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
@@ -115,9 +110,7 @@ class Transaction(Base):
     date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     # Comercio ya limpio por el parser / JEV.
     merchant_clean: Mapped[str] = mapped_column(String(255), nullable=False)
-    source: Mapped[str] = mapped_column(
-        String(16), default=TransactionSource.manual.value
-    )
+    source: Mapped[str] = mapped_column(String(16), default=TransactionSource.manual.value)
     source_ref_id: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -133,9 +126,7 @@ class EmailSyncState(Base):
     # Último historyId procesado: lectura incremental (PRD §F2.2).
     gmail_history_id: Mapped[str | None] = mapped_column(String(32))
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime)
-    status: Mapped[str] = mapped_column(
-        String(16), default=SyncStatusState.active.value
-    )
+    status: Mapped[str] = mapped_column(String(16), default=SyncStatusState.active.value)
     # Último error de sincronización (truncado); NULL cuando va bien.
     last_error: Mapped[str | None] = mapped_column(Text)
 
@@ -145,9 +136,7 @@ class Goal(Base):
 
     __tablename__ = "goals"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
@@ -158,3 +147,29 @@ class Goal(Base):
     color: Mapped[str] = mapped_column(String(9), default="#2E8FFF")
     deadline: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class PlanAlert(Base):
+    """Aviso automático generado cuando un gasto compromete un propósito."""
+
+    __tablename__ = "plan_alerts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "goal_id", "kind", "period", name="uq_plan_alert_period"),
+        Index("ix_plan_alerts_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    goal_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("goals.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    period: Mapped[str] = mapped_column(String(7), nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    goal: Mapped[Goal] = relationship()

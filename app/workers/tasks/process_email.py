@@ -35,6 +35,7 @@ from app.db.models import (
     TransactionSource,
     User,
 )
+from app.goals.monitoring import sync_plan_alerts
 from app.integrations.gmail.client import build_gmail_service
 from app.integrations.gmail.jev_client import ExtractedTransaction, JevClient
 from app.integrations.gmail.parsers import get_parser
@@ -239,6 +240,7 @@ async def _process_message(
         # este insert y el resto del lote continúa (F2.6).
         async with db.begin_nested():
             await db.flush()
+        await sync_plan_alerts(db, user_id, now=tx.date)
         return True
     except IntegrityError:
         logger.info("Duplicado ignorado (idempotente): %s", message_id)

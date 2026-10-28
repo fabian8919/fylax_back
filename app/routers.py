@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from app.alerts.router import router as alerts_router
 from app.billing.router import router as billing_router
 from app.categories.router import router as categories_router
 from app.dashboard.router import router as dashboard_router
@@ -18,5 +19,6 @@ api_router.include_router(categories_router)
 api_router.include_router(transactions_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(goals_router)
+api_router.include_router(alerts_router)
 api_router.include_router(sync_router)
 api_router.include_router(billing_router)  # preparación SaaS (F4)

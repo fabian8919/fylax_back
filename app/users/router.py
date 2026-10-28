@@ -8,6 +8,7 @@ Supabase Auth, que incluye los tokens de Google. El provider_token
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -36,15 +37,26 @@ class UserResponse(BaseModel):
     email: EmailStr
     name: str
     subscription_tier: str
+    # Ingreso tal como lo recibe el usuario y equivalente mensual usado por
+    # presupuesto, dashboard y planes de acción.
+    income_amount: Decimal
+    income_frequency: Literal["monthly", "biweekly"]
     monthly_income: Decimal
     monthly_budget: Decimal
     created_at: datetime
 
 
 class UserUpdate(BaseModel):
-    """PATCH /users/me — opciones de perfil y configuración financiera."""
+    """PATCH /users/me — perfil y configuración financiera.
+
+    income_amount es el valor de cada nómina: monthly = una al mes;
+    biweekly = dos al mes. monthly_income se conserva como compatibilidad
+    para clientes antiguos, pero el ingreso por período tiene prioridad.
+    """
 
     name: str | None = Field(None, max_length=255)
+    income_amount: Decimal | None = Field(None, ge=0)
+    income_frequency: Literal["monthly", "biweekly"] | None = None
     monthly_income: Decimal | None = Field(None, ge=0)
     monthly_budget: Decimal | None = Field(None, ge=0)
 
@@ -65,9 +77,7 @@ async def create_or_update_session(
             id=current_user.id,
             email=current_user.email,
             google_refresh_token=(
-                cipher.encrypt(body.google_refresh_token)
-                if body.google_refresh_token
-                else None
+                cipher.encrypt(body.google_refresh_token) if body.google_refresh_token else None
             ),
         )
         db.add(user)
@@ -109,7 +119,7 @@ async def update_me(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> User:
-    """Actualiza nombre, ingreso mensual y presupuesto mensual."""
+    """Actualiza perfil, ingreso por período y presupuesto mensual."""
     result = await db.execute(select(User).where(User.id == current_user.id))
     user = result.scalar_one_or_none()
     if user is None:
@@ -117,8 +127,29 @@ async def update_me(
             status.HTTP_404_NOT_FOUND,
             detail="Usuario no registrado: llama primero a /auth/session",
         )
-    for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(user, field, value)
+
+    data = body.model_dump(exclude_unset=True)
+    for field in ("name", "monthly_budget"):
+        if field in data:
+            setattr(user, field, data[field])
+
+    if "income_amount" in data or "income_frequency" in data:
+        if "income_amount" in data:
+            user.income_amount = data["income_amount"]
+        if "income_frequency" in data:
+            user.income_frequency = data["income_frequency"]
+        # Migra suavemente perfiles antiguos que solo tenían monthly_income.
+        if user.income_amount == 0 and user.monthly_income > 0:
+            divisor = 2 if user.income_frequency == "biweekly" else 1
+            user.income_amount = user.monthly_income / divisor
+        multiplier = 2 if user.income_frequency == "biweekly" else 1
+        user.monthly_income = user.income_amount * multiplier
+    elif "monthly_income" in data:
+        # Compatibilidad con el cliente anterior.
+        user.monthly_income = data["monthly_income"]
+        divisor = 2 if user.income_frequency == "biweekly" else 1
+        user.income_amount = user.monthly_income / divisor
+
     await db.commit()
     await db.refresh(user)
     return user

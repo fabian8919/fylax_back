@@ -23,6 +23,7 @@ from app.core.exceptions import DuplicateTransactionError
 from app.core.security import CurrentUser, get_current_user
 from app.db.models import Transaction, TransactionSource
 from app.db.session import get_db
+from app.goals.monitoring import sync_plan_alerts
 from app.transactions.schemas import (
     TransactionCreate,
     TransactionResponse,
@@ -86,6 +87,8 @@ async def create_transaction(
         await db.rollback()
         raise DuplicateTransactionError from exc
     await db.refresh(tx)
+    await sync_plan_alerts(db, current_user.id, now=tx.date)
+    await db.commit()
     return tx
 
 

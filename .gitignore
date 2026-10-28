@@ -23,6 +23,9 @@ htmlcov/
 .vscode/
 *.iml
 
+# Logs locales del API y workers
+*.log
+
 # SO
 .DS_Store
 Thumbs.db
