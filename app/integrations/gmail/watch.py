@@ -8,6 +8,8 @@ Costo: el watch habilita las notificaciones push vía Pub/Sub; el backend
 NO hace polling de la bandeja.
 """
 
+from typing import Any
+
 from app.integrations.gmail.client import build_gmail_service
 
 # Tipo de notificación push hacia Pub/Sub (PRD §Épica 2, paso 2).
@@ -19,7 +21,7 @@ def register_watch(
     refresh_token: str,
     project_id: str,
     topic: str,
-) -> dict:
+) -> dict[str, Any]:
     """Registra (o renueva) el watch de Gmail del usuario.
 
     El refresh_token llega DESENCRIPTADO desde el worker (se descifra con
@@ -31,4 +33,5 @@ def register_watch(
         "topicName": TOPIC_NAME_TEMPLATE.format(project=project_id, topic=topic),
     }
     # Expira en 7 días (renovar diariamente — PRD §13).
-    return service.users().watch(userId="me", body=request).execute()
+    response: dict[str, Any] = service.users().watch(userId="me", body=request).execute()
+    return response

@@ -11,6 +11,8 @@ Configuración (PRD §F2.5):
 - errores reportados a Sentry.
 """
 
+from typing import Any
+
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import task_failure
@@ -55,7 +57,11 @@ celery_app.conf.update(
 
 @task_failure.connect
 def report_task_failure(
-    sender=None, task_id=None, exception=None, *args, **kwargs
+    sender: Any = None,
+    task_id: str | None = None,
+    exception: BaseException | None = None,
+    *args: Any,
+    **kwargs: Any,
 ) -> None:
     """Registro de errores en Sentry (PRD §F2.5)."""
     import sentry_sdk

@@ -59,7 +59,18 @@ ignore = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"
+explicit_package_bases = true
 strict = true
+
+# Celery y google-api-python-client no publican tipos para estos módulos.
+[[tool.mypy.overrides]]
+module = ["celery", "celery.*", "googleapiclient", "googleapiclient.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["app.workers.*", "app.integrations.gmail.client"]
+disallow_untyped_decorators = false
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

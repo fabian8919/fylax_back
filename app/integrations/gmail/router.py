@@ -11,6 +11,7 @@ llamada. El cuerpo es un envelope Pub/Sub con base64 en message.data
 
 import base64
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -22,7 +23,7 @@ router = APIRouter(tags=["integrations"])
 
 
 class PubSubPush(BaseModel):
-    message: dict
+    message: dict[str, Any]
     subscription: str
 
 

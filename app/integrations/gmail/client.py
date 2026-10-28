@@ -9,6 +9,8 @@ Este módulo SOLO se usa desde los workers (ADR Web/Workers — PRD §5.2):
 las llamadas a Google pueden tardar segundos y jamás van en el hilo web.
 """
 
+from typing import Any
+
 from google.auth.transport.requests import Request as AuthRequest
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -20,7 +22,7 @@ GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
-def build_gmail_service(refresh_token: str):
+def build_gmail_service(refresh_token: str) -> Any:
     """Devuelve el servicio Gmail API con un access_token fresco.
 
     El refresh_token NUNCA se persiste ni se loguea aquí: vive solo en

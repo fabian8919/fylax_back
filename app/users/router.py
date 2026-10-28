@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import CurrentUser, get_current_user, get_token_cipher
+from app.core.security import CurrentUser, TokenCipher, get_current_user, get_token_cipher
 from app.db.models import EmailSyncState, User
 from app.db.session import get_db
 
@@ -66,7 +66,7 @@ async def create_or_update_session(
     body: SessionRequest,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
-    cipher=Depends(get_token_cipher),
+    cipher: TokenCipher = Depends(get_token_cipher),
 ) -> User:
     """F1.1/F1.3 — upsert del usuario + persistencia cifrada del refresh token."""
     result = await db.execute(select(User).where(User.id == current_user.id))

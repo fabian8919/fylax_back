@@ -17,6 +17,7 @@
 import base64
 import os
 import uuid
+from typing import Any
 
 import jwt
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -49,7 +50,7 @@ def _get_jwks_client(settings: Settings) -> jwt.PyJWKClient:
     return _jwks_client
 
 
-def _decode_via_jwks(token: str, settings: Settings) -> dict:
+def _decode_via_jwks(token: str, settings: Settings) -> dict[str, Any]:
     """Verifica con las llaves públicas de Supabase (ES256 y sucesoras)."""
     signing_key = _get_jwks_client(settings).get_signing_key_from_jwt(token)
     return jwt.decode(
@@ -60,7 +61,7 @@ def _decode_via_jwks(token: str, settings: Settings) -> dict:
     )
 
 
-def _decode_via_legacy_secret(token: str, settings: Settings) -> dict:
+def _decode_via_legacy_secret(token: str, settings: Settings) -> dict[str, Any]:
     """Fallback HS256 con el legacy JWT secret (proyectos sin migrar)."""
     return jwt.decode(
         token,
@@ -74,7 +75,7 @@ def verify_supabase_jwt(
     token: str, settings: Settings = Depends(get_settings)
 ) -> CurrentUser:
     """Valida firma, audiencia y expiración del JWT de Supabase Auth."""
-    payload: dict | None = None
+    payload: dict[str, Any] | None = None
 
     if settings.supabase_url:
         try:

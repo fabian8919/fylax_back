@@ -24,12 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task
-def renew_gmail_watches() -> dict:
+def renew_gmail_watches() -> dict[str, int]:
     """Renueva el watch de todos los usuarios con Gmail conectado."""
     return asyncio.run(_renew_all())
 
 
-async def _renew_all() -> dict:
+async def _renew_all() -> dict[str, int]:
     settings = get_settings()
     engine = create_async_engine(settings.database_url, poolclass=NullPool)
     session_factory = async_sessionmaker(
@@ -52,6 +52,8 @@ async def _renew_all() -> dict:
             for user in users:
                 try:
                     # Descifrado solo en memoria, nunca en logs (F1.3).
+                    if user.google_refresh_token is None:
+                        continue
                     refresh_token = cipher.decrypt(user.google_refresh_token)
                     register_watch(
                         refresh_token,

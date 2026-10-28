@@ -16,7 +16,9 @@ import asyncio
 import base64
 import logging
 import re
+import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from googleapiclient.errors import HttpError
 from sqlalchemy import select
@@ -25,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.categories.seed import FALLBACK_CATEGORY_NAME
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.security import TokenCipher
 from app.db.models import (
     Category,
@@ -63,10 +65,10 @@ _TAG_RE = re.compile(r"<[^>]+>")
     retry_jitter=True,
 )
 def process_new_email(
-    self,
+    self: Any,
     email_address: str,
     history_id: str,
-) -> dict:
+) -> dict[str, bool | int]:
     """Procesa los correos nuevos de un usuario. Idempotente por diseño."""
     try:
         inserted = asyncio.run(_process(email_address, history_id))
@@ -96,7 +98,7 @@ async def _process(email_address: str, history_id: str) -> int:
 
 
 async def _run_pipeline(
-    db: AsyncSession, settings, email_address: str, history_id: str
+    db: AsyncSession, settings: Settings, email_address: str, history_id: str
 ) -> int:
     # 1. Usuario + refresh token descifrado SOLO en memoria (F1.3).
     user = (
@@ -155,7 +157,7 @@ async def _run_pipeline(
         raise
 
 
-def _list_new_message_ids(service, start_history_id: str | None) -> list[str]:
+def _list_new_message_ids(service: Any, start_history_id: str | None) -> list[str]:
     """Mensajes nuevos vía users.history.list; fallback a búsqueda (F2.2)."""
     if start_history_id:
         try:
@@ -196,7 +198,11 @@ def _list_new_message_ids(service, start_history_id: str | None) -> list[str]:
 
 
 async def _process_message(
-    db: AsyncSession, service, jev: JevClient, user_id, message_id: str
+    db: AsyncSession,
+    service: Any,
+    jev: JevClient,
+    user_id: uuid.UUID,
+    message_id: str,
 ) -> bool:
     """Descarga, parsea e inserta UN mensaje. True si generó transacción."""
     msg = (
@@ -247,7 +253,7 @@ async def _process_message(
         return False
 
 
-async def _resolve_category_id(db: AsyncSession, suggested: str | None):
+async def _resolve_category_id(db: AsyncSession, suggested: str | None) -> uuid.UUID:
     if suggested:
         result = await db.execute(
             select(Category.id).where(Category.name.ilike(suggested.strip()))
@@ -263,7 +269,7 @@ async def _resolve_category_id(db: AsyncSession, suggested: str | None):
     return fallback.scalar_one()
 
 
-def _extract_body(payload: dict) -> str:
+def _extract_body(payload: dict[str, Any]) -> str:
     """Texto plano del correo; decodifica base64url y limpia HTML básico.
 
     El cuerpo vive solo en memoria durante el parseo (PRD §10).

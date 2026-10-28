@@ -16,6 +16,9 @@ from app.db.models import Goal, User
 _ZERO = Decimal("0")
 _CENT = Decimal("0.01")
 
+IncomeFrequency = Literal["monthly", "biweekly"]
+PlanStatus = Literal["on_track", "at_risk", "off_track"]
+
 
 class GoalActionPlan(BaseModel):
     """Recomendación accionable y seguimiento con el gasto real del mes."""
@@ -60,8 +63,11 @@ def build_goal_action_plan(
     presupuesto se avisa antes de comprometer el aporte de la próxima nómina.
     """
     now = today or datetime.now(UTC).date()
-    frequency = user.income_frequency if user is not None else "monthly"
-    frequency = "biweekly" if frequency == "biweekly" else "monthly"
+    frequency: IncomeFrequency = (
+        "biweekly"
+        if user is not None and user.income_frequency == "biweekly"
+        else "monthly"
+    )
     periods = Decimal("2") if frequency == "biweekly" else Decimal("1")
     remaining = max(goal.target_amount - goal.saved_amount, _ZERO)
 
@@ -142,7 +148,7 @@ def build_goal_action_plan(
         )
 
     monthly = _money(monthly)
-    status = "on_track"
+    status: PlanStatus = "on_track"
     alert_message = None
     if monthly_spent > monthly_budget or monthly_spent + monthly > monthly_income:
         status = "off_track"
