@@ -77,7 +77,7 @@ alembic upgrade head
 
 info "Setup completo."
 echo
-echo "  API web:        uvicorn app.main:app --reload        # http://localhost:8000/docs"
+echo "  API web:        python -m app                          # http://localhost:8000/docs"
 echo "  Worker Gmail:   celery -A app.workers.celery_app worker -Q gmail"
 echo "  Beat (watches): celery -A app.workers.celery_app beat"
 echo
@@ -87,5 +87,7 @@ echo "  Supabase (RLS — PRD §10) y ten Redis corriendo para los workers."
 # --- 6. Servir (opcional) ----------------------------------------------------
 if [ "$SERVE" = true ]; then
   info "Levantando API en http://localhost:8000 (0.0.0.0: accesible desde la LAN, ej. teléfono físico) ..."
-  exec uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+  # `python -m app` (no `uvicorn app.main:app`): fija el SelectorEventLoop
+  # que psycopg async exige en Windows ANTES de que uvicorn cree el loop.
+  UVICORN_HOST=0.0.0.0 UVICORN_RELOAD=1 exec python -m app
 fi
