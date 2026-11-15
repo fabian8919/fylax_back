@@ -69,6 +69,10 @@ class User(Base):
     # positivos; 0 = no configurado.
     monthly_income: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     monthly_budget: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    # Ingreso por período (0002): monto declarado y su frecuencia. El
+    # equivalente mensual sigue en monthly_income.
+    income_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    income_frequency: Mapped[str] = mapped_column(String(16), default="monthly")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
