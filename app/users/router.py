@@ -8,6 +8,7 @@ Supabase Auth, que incluye los tokens de Google. El provider_token
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -38,6 +39,8 @@ class UserResponse(BaseModel):
     subscription_tier: str
     monthly_income: Decimal
     monthly_budget: Decimal
+    income_amount: Decimal
+    income_frequency: str
     created_at: datetime
 
 
@@ -47,6 +50,8 @@ class UserUpdate(BaseModel):
     name: str | None = Field(None, max_length=255)
     monthly_income: Decimal | None = Field(None, ge=0)
     monthly_budget: Decimal | None = Field(None, ge=0)
+    income_amount: Decimal | None = Field(None, ge=0)
+    income_frequency: Literal["monthly", "biweekly"] | None = None
 
 
 @router.post("/auth/session", response_model=UserResponse)
@@ -119,6 +124,13 @@ async def update_me(
         )
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(user, field, value)
+    # monthly_income derivado del monto+frecuencia (quincenal ×2, misma
+    # regla que el front/demo); si el cliente mandó monthly_income
+    # explícito, ese gana.
+    income_fields = {"income_amount", "income_frequency"}
+    if body.monthly_income is None and body.model_fields_set & income_fields:
+        multiplier = 2 if user.income_frequency == "biweekly" else 1
+        user.monthly_income = user.income_amount * multiplier
     await db.commit()
     await db.refresh(user)
     return user
