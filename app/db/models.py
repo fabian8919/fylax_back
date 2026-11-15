@@ -162,3 +162,35 @@ class Goal(Base):
     color: Mapped[str] = mapped_column(String(9), default="#2E8FFF")
     deadline: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class PlanAlert(Base):
+    """Alerta automática de seguimiento de un propósito (0003_plan_alerts).
+
+    La unique (user_id, goal_id, kind, period) hace idempotente al
+    monitor: una alerta por tipo y período aunque se evalúe varias veces.
+    """
+
+    __tablename__ = "plan_alerts"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "goal_id", "kind", "period", name="uq_plan_alert_period"
+        ),
+        Index("ix_plan_alerts_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    goal_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("goals.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    period: Mapped[str] = mapped_column(String(7), nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
