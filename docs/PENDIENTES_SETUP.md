@@ -1,94 +1,84 @@
 # Pendiente — Login Google end-to-end contra el entorno definitivo
 
-> Estado al **15-oct-2026**. Documento operativo para retomar la sesión.
+> Estado al **14-nov-2026**. Documento operativo para retomar la sesión.
 > Aplica a ambos repos: `fylax_front` (Flutter) y `fylax_back` (FastAPI).
 
-## Lo que YA quedó hecho y verificado
+## ✅ Login end-to-end: VERIFICADO (14-nov-2026)
 
-- Ambos repos leen su configuración **solo del `.env`** (sin ternarios ni
-  `--dart-define` en el front; `pydantic-settings` con `env_file=".env"` en
-  el back).
-- `fylax_front/.env`: `API_BASE_URL=http://10.0.2.2:8000/api/v1`,
-  `SUPABASE_URL=https://phfprgocglekorhkapvw.supabase.co`,
-  `SUPABASE_ANON_KEY=sb_publishable_...` (proyecto **definitivo**).
-  `.env` registrado como asset en `pubspec.yaml` y cargado en `main.dart`
-  con `flutter_dotenv`.
-- `fylax_back/.env`: `SUPABASE_URL` definitivo, `SUPABASE_SECRET_KEY`
-  (service role), `TOKEN_ENCRYPTION_KEY` generada (32 bytes base64),
-  `DATABASE_URL` con password real → pooler `aws-0-us-east-1`.
-- `fylax_back/app/core/config.py`: nuevo campo `supabase_secret_key`.
-- Python 3.12.10 instalado (winget) y `fylax_back/scripts/setup.sh` creado
-  (`./scripts/setup.sh [--serve]` = venv + deps + `alembic upgrade head`).
-- Base de datos alineada: se dropearon 4 tablas viejas **vacías** y se aplicó
-  `alembic upgrade head` limpio → `0001_initial (head)`, tablas `users`,
-  `categories`, `transactions`, `email_sync_state`, `goals` + **10 categorías
-  semilla**.
-- API corriendo y verificada: `GET /docs` → 200, `GET /api/v1/transactions`
-  sin token → **401** (verificación JWT activa).
-- App Flutter corriendo en el emulador (`Medium_Phone_API_36.1`, requiere
-  wipe si el disco se llena — ocurrió una vez:
-  `INSTALL_FAILED_INSUFFICIENT_STORAGE` con ~474 MB libres). Pantalla de
-  login renderiza OK y Supabase inicializa contra el proyecto definitivo
-  (verificado en logcat: "Supabase init completed").
+Flujo completo probado en teléfono físico (Xiaomi Mi 10T, MIUI) contra el
+proyecto definitivo de Supabase (`phfprgocglekorhkapvw`):
 
-## Lo que FALTA para el login end-to-end
+1. OAuth de Google en Chrome → consent screen `gmail.readonly` → deep link
+   `io.supabase.flutter://login-callback` de vuelta a la app.
+2. `POST /api/v1/auth/session` → 200: usuario creado en `users` con
+   `google_refresh_token` **cifrado** (AES-256-GCM) y fila `email_sync_state`
+   con `status='active'` (verificado en la base: 2 usuarios de prueba).
+3. RLS aplicado: 8 políticas activas en `pg_policies` (users, transactions,
+   categories, email_sync_state).
 
-### 1. Google Cloud Console (consent screen + cliente OAuth web)
+### Arreglos aplicados el 14-nov
 
-1. Proyecto de Google Cloud → APIs & Services → habilitar **Gmail API**.
-2. OAuth consent screen: agregar el scope
-   `https://www.googleapis.com/auth/gmail.readonly` (solo lectura — PRD §10)
-   y publicar la política de privacidad (requisito de Google).
-3. Credentials → crear **OAuth Client ID tipo "Web application"**.
-   En "Authorized redirect URIs" agregar la URL de callback de Supabase:
-   `https://phfprgocglekorhkapvw.supabase.co/auth/v1/callback`
-4. Guardar el **Client ID** y **Client Secret** resultantes.
+**fylax_front**:
+- `android/app/src/debug/AndroidManifest.xml`: `usesCleartextTraffic="true"`
+  (solo debug) — requerido para hablar con el back por HTTP en la LAN.
+- `.env`: `SUPABASE_URL`/`SUPABASE_ANON_KEY` reales y
+  `API_BASE_URL=http://<IP-LAN-del-PC>:8000/api/v1` (**con** el prefijo
+  `/api/v1`). Recuerda: el `.env` se empaqueta al compilar; tras editarlo
+  hay que hacer `flutter run` completo (el hot reload no lo recarga).
 
-### 2. Supabase Dashboard (proyecto phfprgocglekorhkapvw)
+**fylax_back**:
+- **Fix Windows/psycopg**: uvicorn 0.54 ignora la política de event loop y
+  codifica `ProactorEventLoop`, incompatible con psycopg async (causaba 500
+  en TODOS los endpoints con DB). Solución:
+  - `app/core/loop_policy.py`: `selector_loop_factory` (devuelve la
+    **instancia** — para `--loop` custom uvicorn no la llama con
+    `use_subprocess`; el Runner la invoca sin args).
+  - `app/__main__.py`: entry point `python -m app` que fija la política y
+    pasa `loop="app.core.loop_policy:selector_loop_factory"`.
+  - `scripts/setup.sh`: levanta el API con `python -m app` (con
+    `UVICORN_HOST=0.0.0.0 UVICORN_RELOAD=1`).
+- **Merge incompleto reparado**: `app/alerts/router.py` y
+  `app/goals/monitoring.py` importaban `PlanAlert`, que no existía en
+  `app/db/models.py` (el merge trajo la migración 0003 pero no el modelo,
+  y olvidó registrar el router). Agregado el modelo `PlanAlert` a
+  `models.py` y `alerts_router` a `app/routers.py`. `/api/v1/alerts`,
+  `/goals` y `/sync/status` ya responden 401 (antes 404/500).
+- `PATCH /users/me`: acepta `income_amount`/`income_frequency` (lo que el
+  front siempre envió y pydantic ignoraba en silencio) y deriva
+  `monthly_income` (quincenal ×2, misma regla que el demo del front);
+  `UserResponse` incluye ambos campos.
+- Tests: 14 passed, 3 skipped.
 
-1. Authentication → Providers → **Google**: habilitar y pegar Client ID /
-   Secret del paso anterior.
-2. Authentication → URL Configuration → **Redirect URLs**: agregar
-   `io.supabase.flutter://login-callback` (deep link que usa la app —
-   `AppConstants.oauthRedirectTo`).
-3. SQL Editor → ejecutar **`fylax_back/supabase/rls_policies.sql`**
-   (Row Level Security — PRD §10).
+## Lo que sigue (Épica 2 — no bloquea login ni CRUD manual)
 
-### 3. Variables pendientes en `fylax_back/.env`
+### Verificación pendiente (hacer en la app)
+
+- Crear una transacción manual y confirmarla en
+  `GET /api/v1/transactions` (Swagger en `http://localhost:8000/docs` o
+  desde el mismo teléfono).
+- Dashboard y feed: cargan vacíos pero sin errores.
+
+### Variables pendientes en `fylax_back/.env` (solo para ingesta automática)
 
 ```
-GOOGLE_CLIENT_ID=<client-id>.apps.googleusercontent.com   # del paso 1.3
-GOOGLE_CLIENT_SECRET=<client-secret>                      # del paso 1.3
+GOOGLE_CLIENT_ID=<client-id>.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=<client-secret>
 GCP_PROJECT_ID=<proyecto-de-google-cloud>
-JEV_API_KEY=<jev-api-key>        # solo para ingesta (Épica 2), no bloquea login
-JEV_BASE_URL=<url-jev>           # idem
+JEV_API_KEY=<jev-api-key>
+JEV_BASE_URL=<url-jev>
 ```
 
-`SUPABASE_JWT_SECRET` se deja vacío a propósito: el backend verifica JWT por
-JWKS público (`app/core/security.py:47`); el legacy HS256 es solo fallback.
-
-## Cómo probar el login (checklist de verificación)
-
-1. `cd fylax_back && ./scripts/setup.sh --serve` → API en `:8000`.
-2. `cd fylax_front && flutter emulators --launch Medium_Phone_API_36.1`
-   (si falla la instalación por disco, relanzar con wipe: ver nota arriba).
-3. `flutter run -d emulator-5554` (sin `--dart-define`, todo viene del `.env`).
-4. En el emulador: **"Continuar con Google"** → navegador → consent screen
-   (debe mostrar SOLO lectura de Gmail) → autorizar → deep link devuelve a la app.
-5. Verificar en la base nueva que `POST /auth/session` creó/actualizó al usuario:
-   - tabla `users`: fila con el email de Google, `google_refresh_token`
-     **cifrado** (AES-256-GCM, nunca texto plano — F1.3).
-   - tabla `email_sync_state`: fila con `status='active'`.
-6. Dashboard y feed deben cargar vacíos pero sin errores; crear una
-   transacción manual y verificarla con
-   `GET /api/v1/transactions` (Swagger en `http://localhost:8000/docs`).
+La ingesta automática (webhook Pub/Sub + workers Celery) requiere además
+Redis local — no bloquea el login ni el CRUD manual.
 
 ## Notas operativas
 
 - `10.0.2.2` en `API_BASE_URL` solo funciona desde el **emulador Android**;
-  en dispositivo físico usar la IP local del PC (`http://192.168.x.x:8000/api/v1`).
-- La ingesta automática (webhook Pub/Sub + workers Celery) requiere además
-  Redis local y las credenciales de Google/JEV — eso es Épica 2 y no bloquea
-  el login ni el CRUD manual.
-- Tareas corriendo al cerrar la sesión: uvicorn (`:8000`) y el emulador son
-  procesos en background; al retomar, relanzar con los pasos 1–3 de arriba.
+  en dispositivo físico usar la IP local del PC
+  (`http://192.168.1.12:8000/api/v1` en la red actual — cambia si cambia
+  la red).
+- Levantar el back: `python -m app` (o `./scripts/setup.sh --serve`).
+  Nunca `uvicorn app.main:app` directo en Windows (rompe psycopg async).
+- `SUPABASE_JWT_SECRET` se deja vacío a propósito: el backend verifica JWT
+  por JWKS público (`app/core/security.py:47`); el legacy HS256 es solo
+  fallback.
