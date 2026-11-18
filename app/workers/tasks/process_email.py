@@ -47,7 +47,8 @@ logger = logging.getLogger(__name__)
 # incremental ya no es válido (404 → se re-sincroniza lo reciente).
 GMAIL_FINANCIAL_QUERY = (
     "from:(bancolombia.com.co OR alertasbancolombia.com.co OR amazon.com "
-    "OR avianca.com OR nequi.com.co OR davivienda.com) "
+    "OR avianca.com OR nequi.com.co OR davivienda.com OR bbva.com.co "
+    "OR bbva.com) "
     "subject:(compra OR compraste OR pagaste OR recibo OR factura OR pago) "
     "newer_than:30d"
 )

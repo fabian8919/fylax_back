@@ -10,6 +10,7 @@ import pytest
 from app.integrations.gmail.parsers import (
     AmazonParser,
     BancolombiaParser,
+    BBVAParser,
     get_parser,
 )
 
@@ -18,6 +19,7 @@ class TestParserFactory:
     def test_domino_conocido_devuelve_parser_propio(self):
         assert isinstance(get_parser("alertas@alertasbancolombia.com.co"), BancolombiaParser)
         assert isinstance(get_parser("auto-confirm@amazon.com"), AmazonParser)
+        assert isinstance(get_parser("notificaciones@bbva.com.co"), BBVAParser)
 
     def test_domino_desconocido_devuelve_none_usa_jev(self):
         # Remitente desconocido → None → el pipeline cae a JEV genérico.
@@ -53,6 +55,25 @@ class TestAmazonParser:
         assert tx is not None
         assert tx.merchant == "Amazon"
         assert tx.amount == 129_900
+
+
+class TestBBVAParser:
+    PARSER = BBVAParser()
+
+    def test_compra_simple(self):
+        body = (
+            "BBVA te informa: compra por $120.000 en ALMACEN EJEMPLO "
+            "el 17/11/2026."
+        )
+        tx = self.PARSER.parse(subject="", body=body)
+        assert tx is not None
+        assert tx.merchant == "ALMACEN EJEMPLO"
+        assert tx.amount == 120_000
+        assert tx.currency == "COP"
+        assert tx.date.isoformat() == "2026-11-17"
+
+    def test_plantilla_cambiada_devuelve_none(self):
+        assert self.PARSER.parse(subject="", body="Texto sin estructura") is None
 
 
 @pytest.mark.skip(reason="Fase 6: cargar set de 30+ correos anonimizados")

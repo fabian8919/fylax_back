@@ -90,11 +90,46 @@ class AviancaParser(TransactionParser):
         return None
 
 
+class BBVAParser(TransactionParser):
+    """Parser de alertas de compra de BBVA Colombia."""
+
+    domains = ("bbva.com.co", "bbva.com")
+    version = "v1"
+
+    _amount_re = re.compile(r"\$\s*([\d.,]+)")
+    _merchant_re = re.compile(
+        r"en\s+([A-Za-z0-9 &'.-]+?)(?:\s+el\s|\s+con\s|\.\s|\s*$)", re.IGNORECASE
+    )
+    _date_re = re.compile(r"(\d{2})/(\d{2})/(\d{4})")
+
+    def parse(self, subject: str, body: str) -> ExtractedTransaction | None:
+        amount_match = self._amount_re.search(body)
+        merchant_match = self._merchant_re.search(body)
+        if not amount_match or not merchant_match:
+            return None  # plantilla cambió → cae a JEV (PRD §13)
+
+        tx_date = date.today()
+        date_match = self._date_re.search(body)
+        if date_match:
+            day, month, year = (int(g) for g in date_match.groups())
+            tx_date = date(year, month, day)
+
+        return ExtractedTransaction(
+            merchant=merchant_match.group(1).strip(),
+            amount=Decimal(amount_match.group(1).replace(".", "").replace(",", "")),
+            date=tx_date,
+            currency="COP",
+            payment_method=None,
+            suggested_category=None,
+        )
+
+
 #: Registro de parsers: crecer aquí suma remitentes sin tocar el pipeline.
 PARSERS: list[TransactionParser] = [
     BancolombiaParser(),
     AmazonParser(),
     AviancaParser(),
+    BBVAParser(),
 ]
 
 
