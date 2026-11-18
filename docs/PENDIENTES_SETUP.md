@@ -90,6 +90,19 @@ worker Celery → Gmail API → correo encontrado → tarea `succeeded`.
 - Consent screen en modo Testing: el refresh token expira a los 7 días;
   publicar el consent screen lo evita.
 
+### Últimos ajustes (17-nov-2026)
+
+- `.gitignore`: ignorados `celerybeat-schedule.*` (los genera el beat al
+  correr en local).
+- App instalada en el teléfono físico (Xiaomi, MIUI) vía
+  `adb install -r build\app\outputs\flutter-apk\app-debug.apk`.
+  MIUI exige activar **"Instalar mediante USB"** en Opciones de
+  desarrollador y confirmar el diálogo en pantalla; sin eso falla con
+  `INSTALL_FAILED_USER_RESTRICTED`.
+- Recordatorio: la app (instalada o en `flutter run`) necesita los 4
+  procesos del back corriendo (API, túnel, worker, beat) y el teléfono en
+  la misma WiFi del PC; el `.env` se empaqueta en el APK al compilar.
+
 ### Variables pendientes en `fylax_back/.env`
 
 ```
