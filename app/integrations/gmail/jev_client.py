@@ -10,6 +10,7 @@ para remitentes sin parser propio o correos que el parser determinista
 no logró resolver.
 """
 
+import logging
 from datetime import date
 from decimal import Decimal
 
@@ -17,6 +18,8 @@ import httpx
 from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractedTransaction(BaseModel):
@@ -48,14 +51,24 @@ No agregues texto ni markdown fuera del JSON."""
 class JevClient:
     def __init__(self) -> None:
         settings = get_settings()
-        self._http = httpx.AsyncClient(
-            base_url=settings.jev_base_url,
-            headers={"Authorization": f"Bearer {settings.jev_api_key}"},
-            timeout=httpx.Timeout(30.0),
+        # JEV es opcional en dev: sin credenciales los correos sin parser
+        # determinista se ignoran en vez de romper la tarea entera.
+        self._enabled = bool(settings.jev_api_key and settings.jev_base_url)
+        self._http = (
+            httpx.AsyncClient(
+                base_url=settings.jev_base_url,
+                headers={"Authorization": f"Bearer {settings.jev_api_key}"},
+                timeout=httpx.Timeout(30.0),
+            )
+            if self._enabled
+            else None
         )
 
     async def extract(self, email_body: str) -> ExtractedTransaction | None:
         """Extrae la transacción; None si el correo no es financiero."""
+        if not self._enabled or self._http is None:
+            logger.warning("JEV no configurado: correo sin parser ignorado")
+            return None
         response = await self._http.post(
             "/extract",
             json={"system": SYSTEM_PROMPT, "input": email_body},

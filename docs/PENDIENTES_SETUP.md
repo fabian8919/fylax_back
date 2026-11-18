@@ -49,27 +49,53 @@ proyecto definitivo de Supabase (`phfprgocglekorhkapvw`):
   `UserResponse` incluye ambos campos.
 - Tests: 14 passed, 3 skipped.
 
-## Lo que sigue (Épica 2 — no bloquea login ni CRUD manual)
+## Lo que sigue (Épica 2 — ingesta automática)
 
-### Verificación pendiente (hacer en la app)
+### Estado al 17-nov-2026: pipeline E2E funcionando
 
-- Crear una transacción manual y confirmarla en
-  `GET /api/v1/transactions` (Swagger en `http://localhost:8000/docs` o
-  desde el mismo teléfono).
-- Dashboard y feed: cargan vacíos pero sin errores.
+Verificado en vivo: webhook → Pub/Sub (simulado) → Redis (Upstash) →
+worker Celery → Gmail API → correo encontrado → tarea `succeeded`.
 
-### Variables pendientes en `fylax_back/.env` (solo para ingesta automática)
+- Configurado en `.env`: `GCP_PROJECT_ID`, `GOOGLE_PUBSUB_VERIFICATION_TOKEN`
+  y `REDIS_URL` (Upstash, `rediss://` con TLS).
+- Túnel público con cloudflared (`cloudflared tunnel --url
+  http://localhost:8000`) → suscripción push de Pub/Sub apuntando a
+  `https://<túnel>/api/v1/webhooks/gmail?token=<GOOGLE_PUBSUB_VERIFICATION_TOKEN>`.
+  **Ojo**: la URL del túnel cambia si se reinicia cloudflared → actualizar
+  la suscripción.
+- Watches de Gmail registrados para ambos usuarios de prueba (expiran a los
+  7 días; el beat los renueva a diario a las 4:17).
+- **Fixes aplicados**:
+  - `app/workers/celery_app.py`: kombu exige `ssl_cert_reqs` EN LA URL
+    rediss:// (no basta `broker_use_ssl`) — se normaliza la URL.
+  - `app/integrations/gmail/jev_client.py`: JEV ahora es OPCIONAL — sin
+    credenciales, los correos sin parser determinista se ignoran con un
+    warning en vez de romper la tarea.
+  - `app/workers/tasks/process_email.py`: el manejador de errores usa una
+    sesión NUEVA para registrar el fallo (la sesión original puede quedar
+    en estado MissingGreenlet tras una excepción a mitad del pipeline).
+
+### Pendiente
+
+- **JEV** (`JEV_API_KEY`/`JEV_BASE_URL`) o parser determinista para remitentes
+  sin parser: la query financiera incluye `nequi.com.co` pero NO hay
+  `NequiParser` — hoy esos correos se ignoran (warning) en vez de parsearse.
+- Levantar los procesos en cada sesión de desarrollo:
+  `python -m app` (API), cloudflared (túnel),
+  `celery -A app.workers.celery_app worker -Q gmail --pool=solo`
+  (en Windows el pool prefork no funciona — usar `--pool=solo`),
+  `celery -A app.workers.celery_app beat`.
+- Prueba real: llegada de una alerta de Bancolombia/Amazon/Avianca al
+  correo → debe aparecer como transacción en la app.
+- Consent screen en modo Testing: el refresh token expira a los 7 días;
+  publicar el consent screen lo evita.
+
+### Variables pendientes en `fylax_back/.env`
 
 ```
-GOOGLE_CLIENT_ID=<client-id>.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=<client-secret>
-GCP_PROJECT_ID=<proyecto-de-google-cloud>
 JEV_API_KEY=<jev-api-key>
 JEV_BASE_URL=<url-jev>
 ```
-
-La ingesta automática (webhook Pub/Sub + workers Celery) requiere además
-Redis local — no bloquea el login ni el CRUD manual.
 
 ## Notas operativas
 

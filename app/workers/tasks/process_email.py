@@ -89,13 +89,13 @@ async def _process(email_address: str, history_id: str) -> int:
     )
     try:
         async with session_factory() as db:
-            return await _run_pipeline(db, settings, email_address, history_id)
+            return await _run_pipeline(db, session_factory, settings, email_address, history_id)
     finally:
         await engine.dispose()
 
 
 async def _run_pipeline(
-    db: AsyncSession, settings, email_address: str, history_id: str
+    db: AsyncSession, session_factory, settings, email_address: str, history_id: str
 ) -> int:
     # 1. Usuario + refresh token descifrado SOLO en memoria (F1.3).
     user = (
@@ -138,19 +138,24 @@ async def _run_pipeline(
         return inserted
     except Exception as exc:
         # 5b. El error queda visible en GET /sync/status (F3.4) y la
-        # tarea se reintenta con backoff (F2.5).
+        # tarea se reintenta con backoff (F2.5). Se usa una SESIÓN NUEVA:
+        # tras una excepción que salió de un greenlet de SQLAlchemy, la
+        # sesión original puede quedar en un estado donde el siguiente
+        # await lanza MissingGreenlet ("IO attempted in an unexpected
+        # place").
         await db.rollback()
-        fresh = (
-            await db.execute(
-                select(EmailSyncState).where(EmailSyncState.user_id == user.id)
-            )
-        ).scalar_one_or_none()
-        if fresh is None:
-            fresh = EmailSyncState(user_id=user.id)
-            db.add(fresh)
-        fresh.status = SyncStatusState.error.value
-        fresh.last_error = str(exc)[:500]
-        await db.commit()
+        async with session_factory() as err_db:
+            fresh = (
+                await err_db.execute(
+                    select(EmailSyncState).where(EmailSyncState.user_id == user.id)
+                )
+            ).scalar_one_or_none()
+            if fresh is None:
+                fresh = EmailSyncState(user_id=user.id)
+                err_db.add(fresh)
+            fresh.status = SyncStatusState.error.value
+            fresh.last_error = str(exc)[:500]
+            await err_db.commit()
         raise
 
 

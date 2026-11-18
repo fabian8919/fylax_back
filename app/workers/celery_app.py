@@ -11,6 +11,8 @@ Configuración (PRD §F2.5):
 - errores reportados a Sentry.
 """
 
+import ssl
+
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import task_failure
@@ -24,10 +26,22 @@ ensure_selector_loop_policy()
 
 settings = get_settings()
 
+# Kombu exige ssl_cert_reqs EN LA URL rediss:// (ej. Upstash) — lo valida
+# al parsear la URL, antes de considerar broker_use_ssl, así que aquí se
+# normaliza la URL y no solo las opciones. CERT_REQUIRED valida el
+# certificado del servidor con la CA del sistema.
+_redis_ssl = None
+_redis_url = settings.redis_url
+if _redis_url.startswith("rediss://"):
+    _redis_ssl = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
+    if "ssl_cert_reqs=" not in _redis_url:
+        sep = "&" if "?" in _redis_url else "?"
+        _redis_url = f"{_redis_url}{sep}ssl_cert_reqs=CERT_REQUIRED"
+
 celery_app = Celery(
     "fylax",
-    broker=settings.redis_url,
-    backend=settings.redis_url,
+    broker=_redis_url,
+    backend=_redis_url,
     include=[
         "app.workers.tasks.process_email",
         "app.workers.tasks.renew_watches",
@@ -35,6 +49,8 @@ celery_app = Celery(
 )
 
 celery_app.conf.update(
+    broker_use_ssl=_redis_ssl,
+    result_backend_use_ssl=_redis_ssl,
     task_default_queue="default",
     task_routes={"app.workers.tasks.process_email.*": {"queue": "gmail"}},
     task_acks_late=True,
