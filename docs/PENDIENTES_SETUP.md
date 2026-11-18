@@ -114,10 +114,37 @@ JEV_BASE_URL=<url-jev>
 
 - `10.0.2.2` en `API_BASE_URL` solo funciona desde el **emulador Android**;
   en dispositivo físico usar la IP local del PC
-  (`http://192.168.1.12:8000/api/v1` en la red actual — cambia si cambia
-  la red).
+  (`http://192.168.1.15:8000/api/v1` en la red actual — **cambia si el
+  router reasigna**; solución: reserva DHCP en el router para la MAC del
+  PC, o el despliegue de abajo).
 - Levantar el back: `python -m app` (o `./scripts/setup.sh --serve`).
   Nunca `uvicorn app.main:app` directo en Windows (rompe psycopg async).
 - `SUPABASE_JWT_SECRET` se deja vacío a propósito: el backend verifica JWT
   por JWKS público (`app/core/security.py:47`); el legacy HS256 es solo
   fallback.
+
+## Fase 6 — Despliegue: que el back no dependa del PC (PRD §11)
+
+Ya está en la nube: **Supabase** (DB), **Upstash** (Redis/Celery) y
+**Pub/Sub**. Falta mover los procesos que hoy corren en el PC:
+
+1. **API web → Cloud Run** (el `Dockerfile` ya está listo):
+   ```
+   gcloud builds submit --tag us-east1-docker.pkg.dev/<proyecto>/fylax/api
+   gcloud run deploy fylax-api --image ... --region us-east1
+   ```
+   URL HTTPS permanente (adiós túnel efímero y HTTP en claro), escala a 0
+   sin tráfico → free tier. Los secretos del `.env` van en
+   **Secret Manager** (DATABASE_URL, TOKEN_ENCRYPTION_KEY, REDIS_URL…).
+2. **Workers Celery (worker + beat) → Compute Engine e2-micro** (free
+   tier): son procesos persistentes; Cloud Run no sirve para eso. VM con
+   repo + `.env` + systemd.
+3. **Reapuntar las puntas**:
+   - Suscripción push de Pub/Sub → URL permanente de Cloud Run.
+   - `API_BASE_URL` del front → URL de Cloud Run (HTTPS).
+   - Completar el job `deploy` de `.github/workflows/ci.yml` (TODO) con
+     Workload Identity Federation para desplegar en cada push a `main`.
+
+**Requisitos del usuario**: habilitar facturación en el proyecto de
+Google Cloud (no cobra dentro del free tier), instalar gcloud CLI
+(`winget install Google.CloudSDK`) y confirmar el project ID.
