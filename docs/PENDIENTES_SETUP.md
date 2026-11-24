@@ -1,6 +1,6 @@
 # Pendiente — Login Google end-to-end contra el entorno definitivo
 
-> Estado al **14-nov-2026**. Documento operativo para retomar la sesión.
+> Estado al **23-nov-2026**. Documento operativo para retomar la sesión.
 > Aplica a ambos repos: `fylax_front` (Flutter) y `fylax_back` (FastAPI).
 
 ## ✅ Login end-to-end: VERIFICADO (14-nov-2026)
@@ -122,6 +122,75 @@ JEV_BASE_URL=<url-jev>
 - `SUPABASE_JWT_SECRET` se deja vacío a propósito: el backend verifica JWT
   por JWKS público (`app/core/security.py:47`); el legacy HS256 es solo
   fallback.
+
+## Estado al 23-nov-2026: parseo dinámico + realtime + fechas reales
+
+Sesión de ingesta en vivo verificada end-to-end (correo reenviado →
+webhook → worker → transacción visible en la app sin refrescar).
+
+**fylax_back**:
+- **Regex dinámicas**: tabla `parser_rules` (migración 0004) — las regex
+  de los parsers ya no están quemadas en código. `RuleParser` genérico
+  construido desde la fila; caché de 5 min en el worker; fallback a la
+  semilla (`parsers/seed.py`) si la tabla está vacía. Flags inline
+  (`(?i)`), montos formato COP. Editar una fila en Supabase = cambio en
+  caliente sin desplegar.
+- **Query de Gmail dinámica**: tabla `app_settings` (0005) clave/valor
+  (`app/core/db_settings.py`); `gmail_financial_query` (fallback cuando
+  expira el historyId) editable en BD. Incluye `gmail.com` mientras
+  duren las pruebas de reenvío.
+- **Fix idempotencia (worker)**: commit por mensaje en vez de savepoint
+  — con el driver async, un IntegrityError en `begin_nested` dejaba la
+  sesión en PendingRollbackError y tumbaba el lote entero. Además
+  `user.id`/`start_history_id` se capturan como valores planos: tras un
+  rollback el ORM queda expirado y el acceso lazy lanzaba
+  MissingGreenlet que ENMASCARABA el error real en los logs.
+- **Fix fechas**: la transacción usa la fecha de recepción del correo
+  (`internalDate` → hora America/Bogota) cuando la regla no extrae fecha
+  del cuerpo; antes era `date.today()` y el feed quedaba desorganizado
+  al reprocesar. Fallback de búsqueda: maxResults 10 → 50.
+- Tests: 18 passed, 3 skipped. Ruff limpio salvo E402 preexistente en
+  `app/__main__.py`.
+
+**fylax_front**:
+- **Tiempo real**: `transactions` agregada a la publicación
+  `supabase_realtime` (SQL directo, RLS filtra por usuario). Provider
+  `realtime_provider.dart` suscrito a INSERTs → invalida
+  dashboard/movimientos/propósitos/alertas: el movimiento aparece solo,
+  sin pull-to-refresh. Enganchado en DashboardScreen y
+  TransactionsFeedScreen. APK recompilada e instalada vía adb.
+
+**Re-importación de datos de prueba**: borrados los movimientos
+`gmail_api` con fecha de ingesta y re-importados con fecha real
+(reset de `email_sync_state.gmail_history_id` a NULL + tarea encolada
+manual + query temporalmente sin filtro de asunto, ya restaurada).
+
+### Pendiente
+
+- **REVISAR: fechas y monto en el resumen (dashboard)** — lo notó el
+  usuario al final de la sesión: con las fechas corregidas los montos se
+  mueven entre meses, y los falsos positivos inflan el "Gasto del mes"
+  (correos de marketing de BBVA parseados como compras: "tus viajes"
+  $30M ×2, "tu Cuenta BBVA" $49.5M, "en cuenta que…" $20.000 con
+  comercio basura). Verificar que `GET /dashboard/summary` agregue bien
+  por mes y limpiar los falsos positivos desde la app.
+- **Precisión de parsers (Fase 6)**: los regex de BBVA/Bancolombia
+  matchean correos de marketing como si fueran compras. Iterar las
+  reglas directo en `parser_rules` (sin desplegar) con el set de correos
+  anonimizados hasta ≥90% de precisión.
+- **Quitar `gmail.com`** de la regla `bancolombia` en `parser_rules` y
+  de `gmail_financial_query` al pasar a producción (es temporal para
+  pruebas de reenvío).
+- **RLS de tablas nuevas**: las políticas de `parser_rules` y
+  `app_settings` están en `supabase/rls_policies.sql` pero se aplican a
+  mano en el SQL Editor de Supabase.
+- **Usuario `ing.felipepadilla@gmail.com` con `invalid_grant`** (refresh
+  token expirado/revocado — consent screen en Testing expira a los 7
+  días): re-login en la app para renovarlo; sus tareas viejas en Redis
+  drenan solas con error.
+- **Cuota Gmail API**: la tormenta de reintentos agotó el límite por
+  minuto (`rateLimitExceeded`); con los fixes ya no hay bucle, pero ojo
+  al re-importar lotes grandes.
 
 ## Fase 6 — Despliegue: que el back no dependa del PC (PRD §11)
 
