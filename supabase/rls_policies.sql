@@ -32,3 +32,17 @@ alter table public.categories add column if not exists user_id uuid
   references public.users(id);
 create policy "categories_select" on public.categories
   for select using (user_id is null or auth.uid() = user_id);
+
+-- parser_rules: configuración global de parseo (sin datos de usuario).
+-- El backend la lee con conexión directa (service role, bypass RLS);
+-- esta política solo permite lectura a usuarios autenticados vía API.
+alter table public.parser_rules enable row level security;
+create policy "parser_rules_read" on public.parser_rules
+  for select to authenticated using (true);
+
+-- app_settings: configuración global clave/valor (sin datos de usuario).
+-- Igual que parser_rules: el backend la lee con service role (bypass
+-- RLS); la política solo habilita lectura a usuarios autenticados.
+alter table public.app_settings enable row level security;
+create policy "app_settings_read" on public.app_settings
+  for select to authenticated using (true);

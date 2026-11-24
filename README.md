@@ -121,8 +121,10 @@ Fases 1–4 del PRD §12 **implementadas y verificadas** (07-oct-2026):
   token, `GET|PATCH /users/me` (perfil + configuración financiera).
 - **Fase 3 — Ingesta Gmail**: cliente OAuth (refresh→access), watch +
   renovación diaria por Celery beat, worker con historyId incremental y
-  fallback de búsqueda, parsers deterministas + JEV, idempotencia por
-  savepoint, `last_error` visible en `/sync/status`.
+  fallback de búsqueda, parsers deterministas con regex dinámicas en la
+  tabla `parser_rules` (editables en caliente; caché de 5 min en el
+  worker) + JEV, idempotencia por savepoint, `last_error` visible en
+  `/sync/status`.
 - **Fase 4 — API de consulta**: transacciones, categorías, dashboard
   (montos positivos + presupuesto del perfil), goals CRUD + abonos,
   sync status.

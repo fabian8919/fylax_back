@@ -26,6 +26,7 @@ from sqlalchemy.pool import NullPool
 
 from app.categories.seed import FALLBACK_CATEGORY_NAME
 from app.core.config import get_settings
+from app.core.db_settings import DEFAULT_SETTINGS, get_setting
 from app.core.security import TokenCipher
 from app.db.models import (
     Category,
@@ -37,21 +38,10 @@ from app.db.models import (
 )
 from app.integrations.gmail.client import build_gmail_service
 from app.integrations.gmail.jev_client import ExtractedTransaction, JevClient
-from app.integrations.gmail.parsers import get_parser
+from app.integrations.gmail.parsers import RuleParser, get_parser, load_parsers
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
-
-# Query de filtrado: solo correos que pueden contener movimientos
-# financieros (PRD §F2.2). Se usa como fallback cuando el historyId
-# incremental ya no es válido (404 → se re-sincroniza lo reciente).
-GMAIL_FINANCIAL_QUERY = (
-    "from:(bancolombia.com.co OR alertasbancolombia.com.co OR amazon.com "
-    "OR avianca.com OR nequi.com.co OR davivienda.com OR bbva.com.co "
-    "OR bbva.com) "
-    "subject:(compra OR compraste OR pagaste OR recibo OR factura OR pago) "
-    "newer_than:30d"
-)
 
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -106,28 +96,40 @@ async def _run_pipeline(
         logger.warning("Ingesta ignorada: usuario %s sin registro/token", email_address)
         return 0
 
+    # Valor plano: tras un rollback el objeto ORM queda expirado y
+    # acceder a user.id haría IO síncrono fuera del greenlet
+    # (MissingGreenlet), enmascarando el error real.
+    user_id = user.id
+
     cipher = TokenCipher(settings.token_encryption_key)
     refresh_token = cipher.decrypt(user.google_refresh_token)
 
+    # Reglas de parseo y query de búsqueda dinámicas desde la BD
+    # (caché de 5 min en cada proceso worker).
+    parsers = await load_parsers(db)
+    gmail_query = (
+        await get_setting(db, "gmail_financial_query")
+    ) or DEFAULT_SETTINGS["gmail_financial_query"]
+
     state = (
         await db.execute(
-            select(EmailSyncState).where(EmailSyncState.user_id == user.id)
+            select(EmailSyncState).where(EmailSyncState.user_id == user_id)
         )
     ).scalar_one_or_none()
     if state is None:
-        state = EmailSyncState(user_id=user.id)
+        state = EmailSyncState(user_id=user_id)
         db.add(state)
 
     try:
         service = build_gmail_service(refresh_token)
         message_ids = _list_new_message_ids(
-            service, state.gmail_history_id or history_id
+            service, state.gmail_history_id or history_id, gmail_query
         )
 
         inserted = 0
         jev = JevClient()
         for message_id in message_ids:
-            if await _process_message(db, service, jev, user.id, message_id):
+            if await _process_message(db, service, jev, user_id, message_id, parsers):
                 inserted += 1
 
         # 6. Estado de sincronización: avance exitoso.
@@ -148,11 +150,11 @@ async def _run_pipeline(
         async with session_factory() as err_db:
             fresh = (
                 await err_db.execute(
-                    select(EmailSyncState).where(EmailSyncState.user_id == user.id)
+                    select(EmailSyncState).where(EmailSyncState.user_id == user_id)
                 )
             ).scalar_one_or_none()
             if fresh is None:
-                fresh = EmailSyncState(user_id=user.id)
+                fresh = EmailSyncState(user_id=user_id)
                 err_db.add(fresh)
             fresh.status = SyncStatusState.error.value
             fresh.last_error = str(exc)[:500]
@@ -160,8 +162,12 @@ async def _run_pipeline(
         raise
 
 
-def _list_new_message_ids(service, start_history_id: str | None) -> list[str]:
-    """Mensajes nuevos vía users.history.list; fallback a búsqueda (F2.2)."""
+def _list_new_message_ids(
+    service, start_history_id: str | None, fallback_query: str
+) -> list[str]:
+    """Mensajes nuevos vía users.history.list; fallback a búsqueda (F2.2).
+
+    fallback_query viene de app_settings.gmail_financial_query (BD)."""
     if start_history_id:
         try:
             ids: list[str] = []
@@ -194,14 +200,19 @@ def _list_new_message_ids(service, start_history_id: str | None) -> list[str]:
     resp = (
         service.users()
         .messages()
-        .list(userId="me", q=GMAIL_FINANCIAL_QUERY, maxResults=10)
+        .list(userId="me", q=fallback_query, maxResults=10)
         .execute()
     )
     return [m["id"] for m in resp.get("messages", [])]
 
 
 async def _process_message(
-    db: AsyncSession, service, jev: JevClient, user_id, message_id: str
+    db: AsyncSession,
+    service,
+    jev: JevClient,
+    user_id,
+    message_id: str,
+    parsers: list[RuleParser],
 ) -> bool:
     """Descarga, parsea e inserta UN mensaje. True si generó transacción."""
     msg = (
@@ -218,7 +229,7 @@ async def _process_message(
     # 3. Parser determinista por dominio; JEV como genérico (F2.3/F2.4).
     domain = sender.split("@")[-1].rstrip(">").strip()
     parsed: ExtractedTransaction | None = None
-    parser = get_parser(domain)
+    parser = get_parser(domain, parsers)
     if parser is not None:
         parsed = parser.parse(subject, body)
     if parsed is None and body.strip():
@@ -241,12 +252,16 @@ async def _process_message(
     )
     db.add(tx)
     try:
-        # Savepoint: un duplicado (mismo source_ref_id) revierte SOLO
-        # este insert y el resto del lote continúa (F2.6).
-        async with db.begin_nested():
-            await db.flush()
+        # Commit por mensaje (no savepoint): con el driver async, un
+        # IntegrityError dentro de begin_nested deja la sesión en
+        # PendingRollbackError y tira el resto del lote. Con commit
+        # individual, un duplicado (mismo source_ref_id) se revierte
+        # solo y los demás correos continúan (F2.6).
+        await db.flush()
+        await db.commit()
         return True
     except IntegrityError:
+        await db.rollback()
         logger.info("Duplicado ignorado (idempotente): %s", message_id)
         return False
 

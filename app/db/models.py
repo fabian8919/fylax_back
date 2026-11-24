@@ -20,7 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -162,6 +162,61 @@ class Goal(Base):
     color: Mapped[str] = mapped_column(String(9), default="#2E8FFF")
     deadline: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ParserRule(Base):
+    """Regla de parseo de correos por remitente (0004_parser_rules).
+
+    Las regex de extracción viven aquí (editables en caliente desde la
+    BD) en vez de quemadas en código. Semilla: parsers/seed.py.
+    Los montos se asumen en formato COP ("." miles, "," decimales).
+    """
+
+    __tablename__ = "parser_rules"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # Identificador del remitente (bancolombia, amazon…), único.
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # Dominios del remitente que esta regla sabe procesar.
+    domains: Mapped[list[str]] = mapped_column(ARRAY(String(255)), nullable=False)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    # Versión de la regla: los bancos cambian plantillas (PRD §13).
+    version: Mapped[str] = mapped_column(String(16), default="v1")
+    # Regex con el monto en el grupo 1 (obligatoria).
+    amount_pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    # Regex con el comercio en el grupo 1; NULL si merchant_static.
+    merchant_pattern: Mapped[str | None] = mapped_column(Text)
+    # Comercio fijo (p. ej. "Amazon") cuando no se extrae del cuerpo.
+    merchant_static: Mapped[str | None] = mapped_column(String(255))
+    # Regex con la fecha completa en el grupo 1 + formato strptime.
+    date_pattern: Mapped[str | None] = mapped_column(Text)
+    date_format: Mapped[str | None] = mapped_column(String(32))
+    currency: Mapped[str] = mapped_column(String(3), default="COP")
+    payment_method: Mapped[str | None] = mapped_column(String(32))
+    suggested_category: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AppSetting(Base):
+    """Configuración dinámica clave/valor (0005_app_settings).
+
+    Parámetros operativos editables en caliente sin redespliegue
+    (p. ej. gmail_financial_query). Semilla: app/core/db_settings.py.
+    """
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(String(255), default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
 
 
 class PlanAlert(Base):

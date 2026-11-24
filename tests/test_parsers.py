@@ -1,5 +1,9 @@
 """Tests de precisión de los parsers deterministas (PRD §F2.4, Fase 6).
 
+Los parsers ahora son reglas dinámicas (tabla parser_rules); estos
+tests validan los patrones de la SEMILLA (parsers/seed.py), que es lo
+que la migración 0004 inserta en la BD.
+
 Criterio de aceptación F2.3: precisión ≥ 90% en monto y comercio sobre un
 set de prueba de al menos 30 correos reales anonimizados. Los fixtures de
 correos anonimizados se agregan en la Fase 6 (no commitear PII).
@@ -7,27 +11,30 @@ correos anonimizados se agregan en la Fase 6 (no commitear PII).
 
 import pytest
 
-from app.integrations.gmail.parsers import (
-    AmazonParser,
-    BancolombiaParser,
-    BBVAParser,
-    get_parser,
-)
+from app.integrations.gmail.parsers import RuleParser, get_parser
+from app.integrations.gmail.parsers.seed import DEFAULT_PARSER_RULES
+
+PARSERS: dict[str, RuleParser] = {
+    seed["name"]: RuleParser.from_seed(seed) for seed in DEFAULT_PARSER_RULES
+}
 
 
 class TestParserFactory:
     def test_domino_conocido_devuelve_parser_propio(self):
-        assert isinstance(get_parser("alertas@alertasbancolombia.com.co"), BancolombiaParser)
-        assert isinstance(get_parser("auto-confirm@amazon.com"), AmazonParser)
-        assert isinstance(get_parser("notificaciones@bbva.com.co"), BBVAParser)
+        parsers = list(PARSERS.values())
+        assert get_parser("alertas@alertasbancolombia.com.co", parsers) is PARSERS[
+            "bancolombia"
+        ]
+        assert get_parser("auto-confirm@amazon.com", parsers) is PARSERS["amazon"]
+        assert get_parser("notificaciones@bbva.com.co", parsers) is PARSERS["bbva"]
 
     def test_domino_desconocido_devuelve_none_usa_jev(self):
         # Remitente desconocido → None → el pipeline cae a JEV genérico.
-        assert get_parser("promo@tienda-desconocida.com") is None
+        assert get_parser("promo@tienda-desconocida.com", list(PARSERS.values())) is None
 
 
 class TestBancolombiaParser:
-    PARSER = BancolombiaParser()
+    PARSER = PARSERS["bancolombia"]
 
     def test_compra_simple(self):
         body = (
@@ -47,7 +54,7 @@ class TestBancolombiaParser:
 
 
 class TestAmazonParser:
-    PARSER = AmazonParser()
+    PARSER = PARSERS["amazon"]
 
     def test_pedido_con_total(self):
         body = "Tu pedido fue confirmado.\nTotal: $129.900\nGracias por comprar."
@@ -58,7 +65,7 @@ class TestAmazonParser:
 
 
 class TestBBVAParser:
-    PARSER = BBVAParser()
+    PARSER = PARSERS["bbva"]
 
     def test_compra_simple(self):
         body = (
