@@ -52,6 +52,19 @@ class TestBancolombiaParser:
         # devuelve None y el pipeline usa JEV (mitigación PRD §13).
         assert self.PARSER.parse(subject="", body="Texto sin estructura") is None
 
+    def test_sin_date_pattern_usa_fecha_de_recepcion(self):
+        # La regla de Bancolombia no extrae fecha del cuerpo: se usa la
+        # fecha de recepción del correo (default_date), no la de hoy.
+        from datetime import date
+
+        body = (
+            "Bancolombia te informa: compraste por $45.500 "
+            "en TIENDA EJEMPLO S.A. el 05/10/2026 con tu tarjeta débito."
+        )
+        tx = self.PARSER.parse(subject="", body=body, default_date=date(2026, 11, 20))
+        assert tx is not None
+        assert tx.date.isoformat() == "2026-11-20"
+
 
 class TestAmazonParser:
     PARSER = PARSERS["amazon"]
@@ -81,6 +94,19 @@ class TestBBVAParser:
 
     def test_plantilla_cambiada_devuelve_none(self):
         assert self.PARSER.parse(subject="", body="Texto sin estructura") is None
+
+    def test_fecha_del_cuerpo_tiene_preferencia_sobre_default(self):
+        # BBVA sí tiene date_pattern: la fecha del cuerpo manda sobre la
+        # fecha de recepción del correo.
+        from datetime import date
+
+        body = (
+            "BBVA te informa: compra por $120.000 en ALMACEN EJEMPLO "
+            "el 17/11/2026."
+        )
+        tx = self.PARSER.parse(subject="", body=body, default_date=date(2026, 11, 23))
+        assert tx is not None
+        assert tx.date.isoformat() == "2026-11-17"
 
 
 @pytest.mark.skip(reason="Fase 6: cargar set de 30+ correos anonimizados")

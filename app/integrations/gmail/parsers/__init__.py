@@ -88,8 +88,14 @@ class RuleParser:
         """Construye el parser desde una entrada de DEFAULT_PARSER_RULES."""
         return cls(**{k: v for k, v in seed.items() if k != "id"})
 
-    def parse(self, subject: str, body: str) -> ExtractedTransaction | None:
-        """Devuelve la transacción o None si la plantilla no coincide."""
+    def parse(
+        self, subject: str, body: str, default_date: date | None = None
+    ) -> ExtractedTransaction | None:
+        """Devuelve la transacción o None si la plantilla no coincide.
+
+        default_date: fecha de recepción del correo; se usa cuando la
+        regla no extrae fecha del cuerpo (sin date_pattern o sin match).
+        """
         amount_match = self._amount_re.search(body)
         if not amount_match:
             return None  # plantilla cambió → cae a JEV (PRD §13)
@@ -104,11 +110,11 @@ class RuleParser:
         if not merchant:
             return None
 
-        tx_date = date.today()
+        tx_date = default_date or date.today()
         if self._date_re is not None and self._date_format:
             date_match = self._date_re.search(body)
             if date_match:
-                # Fecha inválida en el correo → se usa hoy.
+                # Fecha inválida en el correo → se usa la de recepción.
                 with suppress(ValueError):
                     tx_date = datetime.strptime(
                         date_match.group(1), self._date_format

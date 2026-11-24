@@ -26,7 +26,7 @@ DEFAULT_PARSER_RULES: list[dict] = [
         "amount_pattern": r"\$\s*([\d.,]+)",
         "merchant_pattern": r"(?i)en\s+([A-Za-z0-9 &'.-]+?)(?:\s+el|\s*$)",
         "merchant_static": None,
-        "date_pattern": None,  # TODO: extraer la fecha real del cuerpo
+        "date_pattern": None,  # sin patrón: se usa la fecha de recepción del correo
         "date_format": None,
         "currency": "COP",
         "payment_method": "tarjeta_debito",

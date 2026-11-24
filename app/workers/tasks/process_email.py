@@ -17,6 +17,7 @@ import base64
 import logging
 import re
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from googleapiclient.errors import HttpError
 from sqlalchemy import select
@@ -42,6 +43,10 @@ from app.integrations.gmail.parsers import RuleParser, get_parser, load_parsers
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+#: Zona horaria de las transacciones (COP, sin DST): el "día" de un
+#: movimiento es el día en Colombia, no en UTC.
+COLOMBIA_TZ = ZoneInfo("America/Bogota")
 
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -122,9 +127,11 @@ async def _run_pipeline(
 
     try:
         service = build_gmail_service(refresh_token)
-        message_ids = _list_new_message_ids(
-            service, state.gmail_history_id or history_id, gmail_query
-        )
+        # Valor plano ANTES del lote: si un duplicado hace rollback en
+        # _process_message, el objeto state queda expirado y leerlo al
+        # final lanzaría MissingGreenlet (IO síncrono fuera del greenlet).
+        start_history_id = state.gmail_history_id or history_id
+        message_ids = _list_new_message_ids(service, start_history_id, gmail_query)
 
         inserted = 0
         jev = JevClient()
@@ -133,7 +140,7 @@ async def _run_pipeline(
                 inserted += 1
 
         # 6. Estado de sincronización: avance exitoso.
-        state.gmail_history_id = history_id or state.gmail_history_id
+        state.gmail_history_id = history_id or start_history_id
         state.last_sync_at = datetime.now(UTC)
         state.status = SyncStatusState.active.value
         state.last_error = None
@@ -200,7 +207,9 @@ def _list_new_message_ids(
     resp = (
         service.users()
         .messages()
-        .list(userId="me", q=fallback_query, maxResults=10)
+        # Hasta 50: la re-sincronización debe cubrir rachas de varios
+        # días sin sync, no solo los últimos 10 correos financieros.
+        .list(userId="me", q=fallback_query, maxResults=50)
         .execute()
     )
     return [m["id"] for m in resp.get("messages", [])]
@@ -225,13 +234,25 @@ async def _process_message(
     sender = headers.get("from", "")
     subject = headers.get("subject", "")
     body = _extract_body(msg["payload"])
+    # Fecha de recepción del correo (epoch ms → día en hora de
+    # Colombia): fallback cuando la regla no extrae fecha del cuerpo —
+    # la fecha de la transacción es la del correo, no la del día en que
+    # se procesó.
+    received_ms = msg.get("internalDate")
+    received_date = (
+        datetime.fromtimestamp(int(received_ms) / 1000, tz=UTC)
+        .astimezone(COLOMBIA_TZ)
+        .date()
+        if received_ms
+        else None
+    )
 
     # 3. Parser determinista por dominio; JEV como genérico (F2.3/F2.4).
     domain = sender.split("@")[-1].rstrip(">").strip()
     parsed: ExtractedTransaction | None = None
     parser = get_parser(domain, parsers)
     if parser is not None:
-        parsed = parser.parse(subject, body)
+        parsed = parser.parse(subject, body, default_date=received_date)
     if parsed is None and body.strip():
         parsed = await jev.extract(body[:8000])
     if parsed is None or not parsed.merchant or parsed.amount <= 0:
