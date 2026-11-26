@@ -170,7 +170,7 @@ class TestBBVATransferencias:
             "bbvanet.com.co", "BBVA Móvil - Notificación de Transferencias", body
         )
         assert tx is not None
-        assert tx.merchant == "*9425"
+        assert tx.merchant == "Transferencia BBVA"
         assert tx.amount == Decimal("2500000.00")
         assert tx.date.isoformat() == "2026-11-19"
 

@@ -100,7 +100,7 @@ DEFAULT_PARSER_RULES: list[dict] = [
         # Asunto: "BBVA Móvil - Notificación de Transferencias". Cuerpo:
         # tabla "Tipo de transacción: Transferencia de BBVA a BBVA ...
         # Cuenta destino terminada en: *9425 ... Valor: $2,500,000.00".
-        # El correo no trae el nombre del destinatario.
+        # El correo no trae el nombre del destinatario → comercio fijo.
         "id": "00000000-0000-4000-8000-000000000105",
         "name": "bbva_transferencia",
         "domains": ["bbvanet.com.co", "bbva.com.co"],
@@ -108,8 +108,8 @@ DEFAULT_PARSER_RULES: list[dict] = [
         "subject_pattern": r"(?i)notificaci[oó]n de transferencias",
         "priority": 30,
         "amount_pattern": r"(?i)Valor:\s*\$\s*([\d.,]+)",
-        "merchant_pattern": r"(?i)Cuenta destino terminada en:\s*(\*\d+)",
-        "merchant_static": None,
+        "merchant_pattern": None,
+        "merchant_static": "Transferencia BBVA",
         "date_pattern": r"(?i)Fecha de la operaci[oó]n:\s*(\d{4}-\d{2}-\d{2})",
         "date_format": "%Y-%m-%d",
         "currency": "COP",
