@@ -30,9 +30,9 @@ DEFAULT_SETTINGS: dict[str, str] = {
     # incremental ya no es válido (404 → se re-sincroniza lo reciente).
     "gmail_financial_query": (
         "from:(bancolombia.com.co OR alertasbancolombia.com.co OR amazon.com "
-        "OR avianca.com OR nequi.com.co OR davivienda.com OR bbva.com.co "
-        "OR bbva.com) "
-        "subject:(compra OR compraste OR pagaste OR recibo OR factura OR pago) "
+        "OR avianca.com OR nequi.com.co OR davivienda.com OR bbvanet.com.co "
+        "OR bbva.com.co OR bbva.com OR gmail.com) "
+        "subject:(compra OR retiro OR transferencia OR factura OR pago OR envio OR bre-b) "
         "newer_than:30d"
     ),
 }

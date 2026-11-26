@@ -193,6 +193,13 @@ class ParserRule(Base):
     # Regex con la fecha completa en el grupo 1 + formato strptime.
     date_pattern: Mapped[str | None] = mapped_column(Text)
     date_format: Mapped[str | None] = mapped_column(String(32))
+    # Filtro por asunto: la regla solo se intenta si el asunto cumple
+    # este regex (NULL = aplica a cualquier asunto). Evita que correos
+    # de marketing del banco lleguen al regex de montos.
+    subject_pattern: Mapped[str | None] = mapped_column(Text)
+    # Orden de intento cuando un dominio tiene varias reglas (menor
+    # primero).
+    priority: Mapped[int] = mapped_column(default=100)
     currency: Mapped[str] = mapped_column(String(3), default="COP")
     payment_method: Mapped[str | None] = mapped_column(String(32))
     suggested_category: Mapped[str | None] = mapped_column(String(120))

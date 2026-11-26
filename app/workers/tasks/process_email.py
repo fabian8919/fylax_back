@@ -14,6 +14,7 @@
 
 import asyncio
 import base64
+import html
 import logging
 import re
 from datetime import UTC, datetime
@@ -39,7 +40,7 @@ from app.db.models import (
 )
 from app.integrations.gmail.client import build_gmail_service
 from app.integrations.gmail.jev_client import ExtractedTransaction, JevClient
-from app.integrations.gmail.parsers import RuleParser, get_parser, load_parsers
+from app.integrations.gmail.parsers import RuleParser, get_parsers, load_parsers
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ logger = logging.getLogger(__name__)
 COLOMBIA_TZ = ZoneInfo("America/Bogota")
 
 _TAG_RE = re.compile(r"<[^>]+>")
+_STYLE_RE = re.compile(r"(?is)<(style|script)[^>]*>.*?</\1>")
 
 
 @celery_app.task(
@@ -247,12 +249,17 @@ async def _process_message(
         else None
     )
 
-    # 3. Parser determinista por dominio; JEV como genérico (F2.3/F2.4).
+    # 3. Reglas del dominio en orden de prioridad; cada una solo se
+    # intenta si el asunto cumple su filtro (F2.3/F2.4). Si ninguna
+    # parsee, JEV como genérico.
     domain = sender.split("@")[-1].rstrip(">").strip()
     parsed: ExtractedTransaction | None = None
-    parser = get_parser(domain, parsers)
-    if parser is not None:
+    for parser in get_parsers(domain, parsers):
+        if not parser.matches_subject(subject):
+            continue
         parsed = parser.parse(subject, body, default_date=received_date)
+        if parsed is not None:
+            break
     if parsed is None and body.strip():
         parsed = await jev.extract(body[:8000])
     if parsed is None or not parsed.merchant or parsed.amount <= 0:
@@ -304,8 +311,11 @@ async def _resolve_category_id(db: AsyncSession, suggested: str | None):
 
 
 def _extract_body(payload: dict) -> str:
-    """Texto plano del correo; decodifica base64url y limpia HTML básico.
+    """Texto plano del correo; decodifica base64url y limpia HTML.
 
+    Quita bloques <style>/<script> (su CSS/JS quedaba como texto y
+    ensuciaba los regex) y decodifica entidades HTML (&nbsp;, &oacute;…
+    — sin esto los patrones de las reglas no cruzan las etiquetas).
     El cuerpo vive solo en memoria durante el parseo (PRD §10).
     """
     mime = payload.get("mimeType", "")
@@ -320,5 +330,7 @@ def _extract_body(payload: dict) -> str:
 
     decoded = base64.urlsafe_b64decode(data + "==").decode("utf-8", "replace")
     if mime == "text/html":
+        decoded = _STYLE_RE.sub(" ", decoded)
         decoded = _TAG_RE.sub(" ", decoded)
+        decoded = html.unescape(decoded)
     return re.sub(r"\s+", " ", decoded).strip()
