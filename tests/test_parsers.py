@@ -226,11 +226,14 @@ class TestBBVABreB:
             "Marco fabian Zabala , tu envío a través de Bre-B fue exitoso. "
             "La llave *****5553 recibió el valor que enviaste. "
             "Detalles de la operación Fecha y hora 2026/11/23 17:17 "
-            "Valor enviado $ 38.000,00"
+            "Valor enviado $ 38.000,00 "
+            "Persona que recibe PAPELERIA LA NUEVA NORMA "
+            "Entidad que recibe Bold Tipo de llave Código de comercio"
         )
         tx = _pipeline("bbva.com", "El envío se completó correctamente", body)
         assert tx is not None
-        assert tx.merchant == "*****5553"
+        # El comercio es el destinatario real, no la llave enmascarada.
+        assert tx.merchant == "PAPELERIA LA NUEVA NORMA"
         assert tx.amount == Decimal("38000.00")
         assert tx.date.isoformat() == "2026-11-23"
 

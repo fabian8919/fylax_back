@@ -175,9 +175,9 @@ DEFAULT_PARSER_RULES: list[dict] = [
     {
         # Bre-B (notificacionesBreB@bbva.com). Asuntos: "El envío se
         # completó correctamente" / "Tu envío con llave fue exitoso".
-        # Cuerpo: "... La llave *****5553 recibió ... Fecha y hora
-        # 2026/11/23 17:17 Valor enviado $ 38.000,00". Solo Bre-B se
-        # filtra de bbva.com.
+        # Cuerpo: "... Fecha y hora 2026/11/23 17:17 Valor enviado
+        # $ 38.000,00 Persona que recibe PAPELERIA LA NUEVA NORMA
+        # Entidad que recibe Bold ...". Solo Bre-B se filtra de bbva.com.
         "id": "00000000-0000-4000-8000-000000000109",
         "name": "bbva_breb",
         "domains": ["bbva.com"],
@@ -185,7 +185,7 @@ DEFAULT_PARSER_RULES: list[dict] = [
         "subject_pattern": r"(?i)env[ií]o",
         "priority": 70,
         "amount_pattern": r"(?i)Valor enviado\s*\$\s*([\d.,]+)",
-        "merchant_pattern": r"(?i)llave\s+(\*+\d+)",
+        "merchant_pattern": r"(?i)Persona que recibe\s+(.+?)\s+Entidad que recibe",
         "merchant_static": None,
         "date_pattern": r"(?i)Fecha y hora\s+(\d{4}/\d{2}/\d{2})",
         "date_format": "%Y/%m/%d",
